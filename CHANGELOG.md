@@ -2,6 +2,10 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.9 – 2026-11-17
+- Import on top: new tables, pastes and text lines are added to the schematic on screen (e.g. to add a layer), instead of replacing it
+- Choose "Add to current schematic" or "Replace it" at the top of the Import tab; Add is the default
+
 ## v1.8 – 2026-11-17
 - Copy Image and Download PNG include the program name, limit, premium, TIV, rate and date at the top and the legend at the bottom, and are always in the light theme
 - TIV box under the program name: shows the rate per $100 of TIV for the program and each layer; read automatically from a "TIV: …" title row or a "TIV $5.87B" text line, and saved with the program and in the Excel file

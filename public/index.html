@@ -131,6 +131,8 @@ textarea.tall{min-height:300px}
 .tivw input{width:150px;padding:3px 8px}
 .toast button{margin-left:10px;background:none;border:1px solid currentColor;color:inherit;border-radius:2px;padding:1px 8px;cursor:pointer;font:600 12px var(--f-sans)}
 .toast.act{pointer-events:auto}
+.modebar{padding:10px 12px;margin-bottom:12px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--raised)}
+.modebar .sub{margin:6px 0 0}
 .issues{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
 .issues:empty{display:none}
 .issue{font-size:13px;display:flex;gap:8px;align-items:baseline}
@@ -232,6 +234,10 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
         <button role="tab" data-tab="text" aria-selected="false">Quick Add Text</button>
       </div>
 
+      <div class="modebar" id="modeBar" hidden>
+        <div class="seg-ctl"><span class="l">New imports</span><button data-mode="add">Add to current schematic</button><button data-mode="replace">Replace it</button></div>
+        <p class="sub" id="modeNote"></p>
+      </div>
       <div data-pane="table">
         <div id="loadArea">
           <label class="drop" id="drop">
@@ -508,6 +514,8 @@ const S = {
   tiv: store.get("tiv", null),            // total insured value of the program on screen
   combine: store.get("combine", false),   // one box per carrier per layer
   showIssues: false,
+  importMode: store.get("importMode", "add"),   // new imports add to the schematic, or replace it
+  base: null,
   view: store.get("view","import"),   // "schem": schematic only; "import": inputs beside it
   data: {layers:[], unread:[], calc:0}
 };
@@ -563,6 +571,7 @@ function sheetRows(i){
 }
 function readFile(f){
   const name = f.name;
+  beforeImport();
   if(/\.(csv|tsv|txt)$/i.test(name)){
     f.text().then(t => { S.wb=null; loadRows(rowsFromText(t), name); setView("schem"); });
     return;
@@ -580,9 +589,9 @@ $("#file").addEventListener("change", e => { const f = e.target.files[0]; if(f) 
 drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if(f) readFile(f) });
 document.addEventListener("dragover", e => e.preventDefault());
 document.addEventListener("drop", e => { if(!drop.contains(e.target)){ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f){ setTab("table"); readFile(f) } } });
-$("#paste").addEventListener("paste", () => setTimeout(() => { const t=$("#paste").value; S.wb=null; if(t.trim()){ loadRows(rowsFromText(t), "Pasted table"); setView("schem"); } }, 0));
-$("#paste").addEventListener("change", () => { const t=$("#paste").value; if(t.trim() && $("#mapArea").hidden){ S.wb=null; loadRows(rowsFromText(t), "Pasted table"); } });
-$("#newSrc").onclick = () => { $("#loadArea").hidden=false; $("#mapArea").hidden=true; $("#paste").value=""; S.rows=[]; S.wb=null; rebuild(); };
+$("#paste").addEventListener("paste", () => setTimeout(() => { const t=$("#paste").value; S.wb=null; if(t.trim()){ beforeImport(); loadRows(rowsFromText(t), "Pasted table"); setView("schem"); } }, 0));
+$("#paste").addEventListener("change", () => { const t=$("#paste").value; if(t.trim() && $("#mapArea").hidden){ S.wb=null; beforeImport(); loadRows(rowsFromText(t), "Pasted table"); } });
+$("#newSrc").onclick = () => { beforeImport(); $("#loadArea").hidden=false; $("#mapArea").hidden=true; $("#paste").value=""; S.rows=[]; S.wb=null; rebuild(); };
 $("#sheet").onchange = e => { S.sheet = +e.target.value; const r = sheetRows(S.sheet); loadRows(r, S.srcName, `${r.length} rows`); };
 $("#hdr").onchange = e => { S.hdr = Math.max(0, Math.min(S.rows.length-1, (+e.target.value||1)-1)); S.map = refineMap(guessMap(S.rows[S.hdr]||[]), S.rows.slice(S.hdr+1), S.rows[S.hdr]); renderMap(); rebuild(); };
 
@@ -606,8 +615,8 @@ function renderMap(){
 const colLetter = j => String.fromCharCode(65 + (j%26)) + (j>=26 ? Math.floor(j/26) : "");
 
 /* ================= Parsing ================= */
-function parseTable(){
-  const m = S.map, rows = S.rows.slice(S.hdr+1), unread = [], raw = [];
+function parseTable(allRows = S.rows, m = S.map, hdr = S.hdr){
+  const rows = allRows.slice(hdr+1), unread = [], raw = [];
   if(m.market==null) return {raw, unread, problem:"Pick the column that holds the market or carrier name."};
   const get = (r,k) => m[k]!=null ? r[m[k]] : "";
   // share column given as fractions (0.25) or percents (25)?
@@ -615,7 +624,7 @@ function parseTable(){
   const fraction = m.__export || (shareVals.length>0 && shareVals.every(v=>v<=1) && !rows.some(r=>String(r[m.share]).includes("%")));
   let curLayer = null;
   rows.forEach((r, i) => {
-    const rowNo = S.hdr + i + 2;
+    const rowNo = hdr + i + 2;
     const name = String(get(r,"market")??"").trim();
     // layer: from Layer text, else Limit + Attachment; blank cells carry down (merged cells)
     let L = null;
@@ -761,9 +770,17 @@ const median = a => { const s=[...a].sort((x,y)=>x-y); const m=Math.floor(s.leng
 function mkey(n){ return String(n).toLowerCase().replace(/\b(insurance|ins|syndicate|syn|ltd|limited|plc|inc|co|company|group|re|reinsurance|uk|us|au|australia|se|ag|sa)\b/g,"").replace(/[^a-z0-9]/g,"") || String(n).toLowerCase(); }
 
 function rebuild(){
-  if(S.tab==="text"){ const t = parseText($("#src").value); if(t.tiv) setTiv(t.tiv); S.data = build(t); }
-  else S.data = S.rows.length ? build(parseTable()) : {layers:[], unread:[], calc:0};
+  let cur;
+  if(S.tab==="text"){ cur = parseText($("#src").value); if(cur.tiv) setTiv(cur.tiv); }
+  else cur = S.rows.length ? parseTable() : {raw:[], unread:[]};
+  const base = S.base ? parseTable(S.base, EXPORT_MAP, 0) : {raw:[], unread:[]};
+  S.data = build({raw:[...base.raw, ...cur.raw], unread:cur.unread, problem:cur.problem});
   render();
+}
+/* Importing on top: in "Add" mode, whatever is on screen is kept as the base (in the Excel export layout)
+   and the next table, paste or text is added to it instead of replacing it. */
+function beforeImport(){
+  S.base = S.importMode==="add" && S.data.layers.length ? exportRows($("#title").value.trim() || "Program") : null;
 }
 
 /* ================= Colours ================= */
@@ -808,6 +825,13 @@ function fitName(name, w, size){
 /* ================= Render ================= */
 function render(){ renderMain(); updateLib(); }
 function renderMain(){
+  // Import tab: say what happens to the schematic on screen
+  const baseN = S.base ? S.base.length-1 : 0, onScreen = (S.data.layers||[]).reduce((n,L)=>n+L.lines.length,0);
+  $("#modeBar").hidden = !onScreen && !baseN;
+  $$("[data-mode]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.mode===S.importMode));
+  $("#modeNote").textContent = S.base
+    ? `Adding to the ${baseN} line${baseN>1?"s":""} already on the schematic. Load or paste another table, or type lines, and they're added too.`
+    : S.importMode==="add" ? "Your next table, paste or text is added to the schematic on screen." : "Your next table, paste or text replaces the schematic on screen.";
   $("main").classList.toggle("view-schem", S.view==="schem");
   $$("[data-view]").forEach(b=>b.setAttribute("aria-selected", b.dataset.view===S.view));
   const {layers, unread, problem, calc} = S.data;
@@ -1209,11 +1233,11 @@ function tableHtml(layers){
 
 /* ================= Editing the schedule in place ================= */
 // Once edited, the schedule becomes this program's own table (the Excel export layout), so edits stick and save.
-const editable = () => S.tab==="table" && S.map.__export && S.rows.length>0;
+const editable = () => S.tab==="table" && S.map.__export && S.rows.length>0 && !S.base;
 function toEditable(){
   if(editable()) return;
   const name = $("#title").value.trim() || "Program";
-  S.rows = exportRows(name); S.map = {...EXPORT_MAP}; S.hdr = 0; S.wb = null; S.srcName = "Edited schedule";
+  S.rows = exportRows(name); S.base = null; S.map = {...EXPORT_MAP}; S.hdr = 0; S.wb = null; S.srcName = "Edited schedule";
   S.tab = "table"; store.set("tab", "table");
   $("#srcName").textContent = S.srcName; $("#srcInfo").textContent = "edited in the table"; $("#hdr").value = 1;
   $("#sheetWrap").hidden = true; $("#loadArea").hidden = true; $("#mapArea").hidden = false;
@@ -1407,12 +1431,14 @@ function loadProgram(name){
   $("#title").value = name; store.set("title", name);
   S.wb = null; S.tab = "table"; store.set("tab", "table");
   p.rows.slice(1).forEach(r => { delete S.apSet[mkey(r[4])]; }); store.set("apSet", S.apSet);
+  S.base = null;
   loadRows(p.rows.map(r=>r.slice()), name, "Saved program");
   S.snap = JSON.stringify(exportRows(name));
   S.view = "schem"; store.set("view", "schem");
   render();
 }
 function newProgram(){
+  S.base = null;
   setTiv(null);
   S.view = "import"; store.set("view", "import");
   S.cur = null; store.set("cur", null);
@@ -1477,6 +1503,9 @@ $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.9", date:"2026-11-17", notes:[
+    "Import on top: new tables, pastes and text lines are added to the schematic on screen (e.g. to add a layer), instead of replacing it",
+    "Choose \"Add to current schematic\" or \"Replace it\" at the top of the Import tab; Add is the default"]},
   {v:"1.8", date:"2026-11-17", notes:[
     "Copy Image and Download PNG include the program name, limit, premium, TIV, rate and date at the top and the legend at the bottom, and are always in the light theme",
     "TIV box under the program name: shows the rate per $100 of TIV for the program and each layer; read automatically from a \"TIV: \u2026\" title row or a \"TIV $5.87B\" text line, and saved with the program and in the Excel file",
@@ -1569,17 +1598,29 @@ QBE 10% prem $245k [London]
 Sompo declined`;
 
 /* ================= Wiring ================= */
-function setTab(t){ S.tab = t; store.set("tab", t); rebuild(); }
+function setTab(t){
+  // moving to an empty tab in Add mode: the schematic so far becomes the base, and the tab left behind is cleared
+  // (its lines now live in the base, so they aren't counted twice)
+  const destEmpty = t==="text" ? !$("#src").value.trim() : !S.rows.length;
+  if(t!==S.tab && S.importMode==="add" && destEmpty && S.data.layers.length){
+    beforeImport();
+    if(S.tab==="table"){ S.rows = []; S.wb = null; $("#paste").value = ""; $("#loadArea").hidden = false; $("#mapArea").hidden = true; }
+    else { $("#src").value = ""; store.set("src", ""); }
+  }
+  S.tab = t; store.set("tab", t); rebuild();
+}
 $$("[data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 function setView(v){ S.view = v; store.set("view", v); render(); }
 $$("[data-view],[data-goto]").forEach(b=>b.onclick=()=>setView(b.dataset.view||b.dataset.goto));
 $$("[data-colby]").forEach(b=>b.onclick=()=>{ S.colby=b.dataset.colby; store.set("colby2",S.colby); render() });
 $$("[data-scale]").forEach(b=>b.onclick=()=>{ S.scale=b.dataset.scale; store.set("scale",S.scale); render() });
 $("#tiv").addEventListener("change", e => { setTiv(money(e.target.value)); render(); });
+$$("[data-mode]").forEach(b=>b.onclick=()=>{ S.importMode=b.dataset.mode; store.set("importMode",S.importMode); if(S.importMode==="replace" && S.base){ S.base=null; rebuild(); } else render(); });
 $$("[data-combine]").forEach(b=>b.onclick=()=>{ S.combine=!S.combine; store.set("combine",S.combine); render(); });
 $$("[data-lbl]").forEach(b=>b.onclick=()=>{ S.lbl=b.dataset.lbl; store.set("lbl",S.lbl); render() });
-$("#sampleTbl").onclick = ()=>{ if(!$("#title").value) $("#title").value="Sample Property Program"; S.wb=null; loadRows(SAMPLE_TBL.map(r=>r.slice()), "Sample schedule.xlsx", "15 rows"); setView("schem"); };
-$("#sampleTxt").onclick = ()=>{ $("#src").value = SAMPLE_TXT; if(!$("#title").value) $("#title").value="Sample Property Program"; store.set("src", SAMPLE_TXT); rebuild(); };
+$("#sampleTbl").onclick = ()=>{ if(!$("#title").value) $("#title").value="Sample Property Program"; S.wb=null; beforeImport(); loadRows(SAMPLE_TBL.map(r=>r.slice()), "Sample schedule.xlsx", "15 rows"); setView("schem"); };
+$("#sampleTxt").onclick = ()=>{ if(!$("#src").value.trim()) beforeImport(); $("#src").value = SAMPLE_TXT; if(!$("#title").value) $("#title").value="Sample Property Program"; store.set("src", SAMPLE_TXT); rebuild(); };
+$("#src").addEventListener("focus", () => { if(!$("#src").value.trim() && S.tab==="text" && !S.base) beforeImport(); });
 let tmr; $("#src").addEventListener("input", ()=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ store.set("src",$("#src").value); rebuild() },150) });
 $("#title").addEventListener("input", ()=>{ store.set("title",$("#title").value); render() });
 let rt; addEventListener("resize", ()=>{ clearTimeout(rt); rt=setTimeout(render,120) });
