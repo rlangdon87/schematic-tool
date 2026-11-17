@@ -2,6 +2,11 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.10 – 2026-11-17
+- Schedule Detail and the Excel file list layers Primary first (smaller primaries first), then by attachment, lowest to highest
+- Filter the Schedule Detail by carrier or notes, access point, status or layer; matching boxes stay bright in the schematic and the rest fade (exported images are never faded)
+- "–" instead of $0 premium when a schedule has no premiums
+
 ## v1.9 – 2026-11-17
 - Import on top: new tables, pastes and text lines are added to the schematic on screen (e.g. to add a layer), instead of replacing it
 - Choose "Add to current schematic" or "Replace it" at the top of the Import tab; Add is the default

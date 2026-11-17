@@ -131,6 +131,10 @@ textarea.tall{min-height:300px}
 .tivw input{width:150px;padding:3px 8px}
 .toast button{margin-left:10px;background:none;border:1px solid currentColor;color:inherit;border-radius:2px;padding:1px 8px;cursor:pointer;font:600 12px var(--f-sans)}
 .toast.act{pointer-events:auto}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.filters .in{width:220px}
+.filters select{width:auto;max-width:200px}
+.filters #fCount{font-size:12.5px}
 .modebar{padding:10px 12px;margin-bottom:12px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--raised)}
 .modebar .sub{margin:6px 0 0}
 .issues{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
@@ -314,6 +318,14 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
       <div class="card-h">
         <div><h2>Schedule Detail</h2><p class="sub">Click any cell to edit it; × removes a line. Figures in <span style="color:var(--calc);font-style:italic">blue italics</span> weren't in the schedule and are calculated: line = share × limit, share = line ÷ limit, premium = share × 100% premium, 100% premium = premium ÷ share.</p></div>
         <button class="btn ghost sm noprint" id="copyTsv">Copy as Table</button>
+      </div>
+      <div class="filters noprint" id="filters">
+        <input class="in" id="fQ" type="search" placeholder="Filter carriers or notes…" aria-label="Filter carriers or notes">
+        <select id="fAp" aria-label="Access point"></select>
+        <select id="fSt" aria-label="Status"><option value="">All statuses</option><option value="firm">Firm</option><option value="indication">Indication</option><option value="declined">Declined</option></select>
+        <select id="fLayer" aria-label="Layer"></select>
+        <span class="muted" id="fCount"></span>
+        <button class="linkish" id="fClear" hidden>Clear filters</button>
       </div>
       <div class="tbl-wrap" id="table"><div class="empty" style="border:0">No data yet.</div></div>
     </section>
@@ -514,6 +526,7 @@ const S = {
   tiv: store.get("tiv", null),            // total insured value of the program on screen
   combine: store.get("combine", false),   // one box per carrier per layer
   showIssues: false,
+  filter: {q:"", ap:"", st:"", layer:""},   // Schedule Detail filter (also fades other boxes in the schematic)
   importMode: store.get("importMode", "add"),   // new imports add to the schematic, or replace it
   base: null,
   view: store.get("view","import"),   // "schem": schematic only; "import": inputs beside it
@@ -736,7 +749,7 @@ function build({raw, unread, problem}){
     const ap = S.apSet[mk] || x.ap || apFromName(x.market);
     L.lines.push({...x, share: share||0, ap, prem: x.prem, premCalc:false, shareCalc, lineCalc: !x.line});
   });
-  const out = [...layers.values()].sort((a,b)=>a.attach-b.attach);
+  const out = [...layers.values()].sort((a,b)=>a.attach-b.attach || a.limit-b.limit);   // primary first, then by attachment
   let calcCount = 0;
   out.forEach(L => {
     const live = L.lines.filter(l=>l.status!=="declined");
@@ -865,7 +878,7 @@ function renderMain(){
   $("#progSub").textContent = `${S.bands.bands.length} layer${S.bands.bands.length>1?"s":""} · ${mk.size} markets · ${fmtM(top)} program limit`;
   $("#kpis").innerHTML = [
     ["Program Limit", fmtM(top)],
-    ["Premium (placed)", fmt$(prem)],
+    ["Premium (placed)", layers.some(L=>L.lines.some(l=>l.prem!=null)) ? fmt$(prem) : "–"],
     ["100% Premium", price100 ? fmt$(price100) : "–"],
     ...(S.tiv ? [["Rate per $100 TIV", fmtRate((price100 || prem)/S.tiv*100)]] : []),
     ["Markets", mk.size],
@@ -876,7 +889,13 @@ function renderMain(){
   $("#schem").innerHTML = svg(layers, top);
   bindTips();
   renderLegend();
+  const keep = (sel, opts, all) => { const v = sel.value; sel.innerHTML = `<option value="">${all}</option>` + opts.map(o=>`<option${o===v?" selected":""}>${esc(o)}</option>`).join(""); if(!opts.includes(v)) sel.value = ""; };
+  keep($("#fAp"), apList(), "All access points"); keep($("#fLayer"), layers.map(layerName), "All layers");
+  S.filter.ap = $("#fAp").value; S.filter.layer = $("#fLayer").value;
   $("#table").innerHTML = tableHtml(layers);
+  const totalLines = layers.reduce((n,L)=>n+L.lines.length,0), shownLines = layers.reduce((n,L)=>n+L.lines.filter(x=>matchesFilter(x,L)).length,0);
+  $("#fCount").textContent = filterOn() ? `Showing ${shownLines} of ${totalLines} lines` : `${totalLines} lines`;
+  $("#fClear").hidden = !filterOn();
   bindTable();
   $$(".apsel").forEach(s => s.onchange = () => {
     const k = s.dataset.mk; if(s.value==="__new"){ const v = prompt("New access point name (e.g. an MGA or regional office):"); if(!v){ s.value=""; return } S.apSet[k]=normAP(v); }
@@ -1137,7 +1156,8 @@ function svg(layers, top){
     const lineAmt = L.limit*ln.share/100;
     const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}${spans>1?` · runs through ${spans} layers`:""}${ln.n>1?` · ${ln.n} lines combined`:""}\nLine ${fmt$(lineAmt)}\nPremium for their share ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}\n100% layer premium ${fmt$(ln.price100)}${ln.priceCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
     const bx = bk.x+1, by = y0+1, bw = Math.max(0, bk.w-2), bh = h-2;
-    P.push(`<g data-tip="${esc(tip)}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="${fill}"/>`);
+    const fade = filterOn() && !matchesFilter(ln, L) && !exporting;
+    P.push(`<g data-tip="${esc(tip)}"${fade ? ' opacity=".18"' : ""}><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="${fill}"/>`);
     if(ln.status==="indication") P.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="none" stroke="${g}" stroke-dasharray="3 2"/>`);
     if(bw>3) P.push(`<rect x="${bx}" y="${by}" width="3" height="${bh}" fill="${g}"/>`);
     const inner = bw - 10, cx = bx + 1.5 + bw/2;
@@ -1207,17 +1227,27 @@ function layerStatus(L){
   const bs = S.bands.bands.filter(B=>B.attach>=L.attach && B.attach+B.limit<=L.attach+L.limit);
   return bs.some(B=>B.placed<99.995) ? "Open" : bs.some(B=>B.placed>100.005) ? "Overplaced" : "Placed";
 }
+function matchesFilter(x, L){
+  const f = S.filter, q = f.q.trim().toLowerCase();
+  if(q && !(x.market.toLowerCase().includes(q) || String(x.note||"").toLowerCase().includes(q))) return false;
+  if(f.ap && (x.ap || NONE) !== f.ap) return false;
+  if(f.st && x.status !== f.st) return false;
+  if(f.layer && layerName(L) !== f.layer) return false;
+  return true;
+}
+const filterOn = () => !!(S.filter.q.trim() || S.filter.ap || S.filter.st || S.filter.layer);
 function tableHtml(layers){
   const aps = [...new Set([...AP, ...apList().filter(a=>a!==NONE)])];
   const inp = (f, v, cls) => `<input class="cell${cls?" "+cls:""}" data-f="${f}" value="${esc(v)}" aria-label="${f}">`;
   let h = `<table class="grid"><thead><tr><th>Layer / Market</th><th>Access Point</th><th class="r">Share</th><th class="r">Line</th><th class="r">Premium</th><th class="r">100% Premium</th><th>Status</th><th>Notes</th><th class="noprint"></th></tr></thead><tbody>`;
   let xi = 0;   // same order as exportRows, so a row can be found again once the table becomes editable
-  [...layers].reverse().forEach((L, li) => {
-    h += `<tr class="lh"><td>${layerName(L)}${L.label?" · "+esc(L.label):""} <button class="addrow noprint" data-li="${li}" title="Add a carrier to this layer">+ Carrier</button></td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmt$(L.limit*L.placed/100)}</td><td class="r">${fmt$(L.prem)}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${layerStatus(L)}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td><td class="noprint"></td></tr>`;
+  layers.forEach((L, li) => {
+    const shown = L.lines.filter(x => matchesFilter(x, L)).length;
+    h += `<tr class="lh"${filterOn() && !shown ? " hidden" : ""}><td>${layerName(L)}${L.label?" · "+esc(L.label):""} <button class="addrow noprint" data-li="${li}" title="Add a carrier to this layer">+ Carrier</button></td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmt$(L.limit*L.placed/100)}</td><td class="r">${L.lines.some(l=>l.prem!=null) ? fmt$(L.prem) : "–"}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${layerStatus(L)}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td><td class="noprint"></td></tr>`;
     L.lines.forEach(x=>{
       const k = mkey(x.market), dec = x.status==="declined";
       const sw = dec ? `<span class="sw" style="border:1px solid var(--line)"></span>` : `<span class="sw" style="background:${colourOf(x)}"></span>`;
-      h += `<tr data-xi="${xi++}" data-row="${x.row-1}"><td><span style="display:flex;align-items:center;gap:6px">${sw}${inp("market", x.market, "name")}</span></td>
+      h += `<tr data-xi="${xi++}" data-row="${x.row-1}"${matchesFilter(x, L) ? "" : " hidden"}><td><span style="display:flex;align-items:center;gap:6px">${sw}${inp("market", x.market, "name")}</span></td>
         <td><select class="apsel noprint${x.ap?"":" none"}" data-f="ap" data-mk="${esc(k)}"><option value="">${NONE}</option>${aps.map(a=>`<option${a===x.ap?" selected":""}>${esc(a)}</option>`).join("")}<option value="__new">+ Add access point…</option></select></td>
         <td class="r${!dec&&x.shareCalc?" calc":""}">${inp("share", dec||!x.share ? "" : fmtPct(x.share,4))}</td>
         <td class="r${!dec&&x.lineCalc&&x.share?" calc":""}">${inp("line", dec||!x.share ? "" : fmt$(L.limit*x.share/100))}</td>
@@ -1281,7 +1311,7 @@ function bindTable(){
     const r = rowOf(b.closest("tr")), gone = S.rows.splice(r, 1)[0]; rebuild();
     toastAction(`Removed ${gone[4]}`, "Undo", () => { S.rows.splice(r, 0, gone); rebuild(); });
   });
-  const layersTop = [...S.data.layers].reverse();
+  const layersTop = S.data.layers;
   $$("#table .addrow").forEach(b => b.onclick = () => addRow(layersTop[+b.dataset.li]));
   const al = $("#addLayer"); if(al) al.onclick = () => {
     const t = prompt("New layer, e.g. $25M xs $75M or Primary $30M:"); if(!t) return;
@@ -1308,9 +1338,10 @@ function toastAction(m, label, fn){
 }
 function toast(m){ const t=$("#toast"); t.classList.remove("act"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove("on"),2200) }
 // the image people paste into emails and decks: title, date and legend included, always in the light theme
+let exporting = false;   // the exported image never shows the filter fade
 function exportSvg(){
   const root = document.documentElement, prev = root.getAttribute("data-theme");
-  root.setAttribute("data-theme", "light");
+  root.setAttribute("data-theme", "light"); exporting = true;
   try{
     const layers = S.data.layers, top = Math.max(...layers.map(L=>L.attach+L.limit));
     const chart = svg(layers, top), m = chart.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/), W = +m[1], Hc = +m[2];
@@ -1337,6 +1368,7 @@ function exportSvg(){
     const total = ly + 30;
     return {W, H: total, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${total}" width="${W}" height="${total}" font-family='${FONT}'><rect width="${W}" height="${total}" fill="${surface}"/>${P.join("")}<g transform="translate(0 ${headH})">${inner}</g>${lg.join("")}</svg>`};
   } finally {
+    exporting = false;
     if(prev) root.setAttribute("data-theme", prev); else root.removeAttribute("data-theme");
   }
 }
@@ -1368,7 +1400,7 @@ const EXPORT_FMT = [[2,"$#,##0"],[3,"$#,##0"],[6,"0.00%"],[7,"$#,##0"],[8,"$#,##
 // one row per carrier line, with every figure filled in; "Calculated" lists the ones we worked out
 function exportRows(name){
   const rows = [EXPORT_HDR.slice()];
-  [...S.data.layers].reverse().forEach(L => L.lines.forEach(x => {
+  S.data.layers.forEach(L => L.lines.forEach(x => {
     const dec = x.status==="declined", calc = [];
     if(!dec){
       if(x.shareCalc) calc.push("Share %");
@@ -1503,6 +1535,10 @@ $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.10", date:"2026-11-17", notes:[
+    "Schedule Detail and the Excel file list layers Primary first (smaller primaries first), then by attachment, lowest to highest",
+    "Filter the Schedule Detail by carrier or notes, access point, status or layer; matching boxes stay bright in the schematic and the rest fade (exported images are never faded)",
+    "\"\u2013\" instead of $0 premium when a schedule has no premiums"]},
   {v:"1.9", date:"2026-11-17", notes:[
     "Import on top: new tables, pastes and text lines are added to the schematic on screen (e.g. to add a layer), instead of replacing it",
     "Choose \"Add to current schematic\" or \"Replace it\" at the top of the Import tab; Add is the default"]},
@@ -1615,6 +1651,9 @@ $$("[data-view],[data-goto]").forEach(b=>b.onclick=()=>setView(b.dataset.view||b
 $$("[data-colby]").forEach(b=>b.onclick=()=>{ S.colby=b.dataset.colby; store.set("colby2",S.colby); render() });
 $$("[data-scale]").forEach(b=>b.onclick=()=>{ S.scale=b.dataset.scale; store.set("scale",S.scale); render() });
 $("#tiv").addEventListener("change", e => { setTiv(money(e.target.value)); render(); });
+$("#fQ").addEventListener("input", e => { S.filter.q = e.target.value; render(); });
+["fAp","fSt","fLayer"].forEach(id => $("#"+id).addEventListener("change", e => { S.filter[{fAp:"ap",fSt:"st",fLayer:"layer"}[id]] = e.target.value; render(); }));
+$("#fClear").onclick = () => { S.filter = {q:"", ap:"", st:"", layer:""}; $("#fQ").value = ""; $("#fSt").value = ""; $("#fAp").value = ""; $("#fLayer").value = ""; render(); };
 $$("[data-mode]").forEach(b=>b.onclick=()=>{ S.importMode=b.dataset.mode; store.set("importMode",S.importMode); if(S.importMode==="replace" && S.base){ S.base=null; rebuild(); } else render(); });
 $$("[data-combine]").forEach(b=>b.onclick=()=>{ S.combine=!S.combine; store.set("combine",S.combine); render(); });
 $$("[data-lbl]").forEach(b=>b.onclick=()=>{ S.lbl=b.dataset.lbl; store.set("lbl",S.lbl); render() });
