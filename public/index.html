@@ -141,6 +141,24 @@ table.grid{width:100%;border-collapse:collapse;font-size:13px}
 .grid .r{text-align:right}
 .grid tr.lh td{background:var(--raised);font-weight:700;color:var(--navy);border-bottom:1px solid var(--line)}
 .grid td.calc{color:var(--calc);font-style:italic}
+.grid input.cell,.grid select.cell{font:inherit;color:inherit;font-style:inherit;background:transparent;border:1px solid transparent;border-radius:var(--r);padding:3px 6px;width:100%;min-width:0}
+.grid input.cell:hover,.grid select.cell:hover{border-color:var(--input-line)}
+.grid input.cell:focus{border-color:var(--accent);background:var(--input);outline:none}
+.grid td.r input.cell{text-align:right;width:120px}
+.grid input.cell.name{min-width:180px}
+.grid input.cell.note{min-width:140px}
+.grid select.cell.st{width:auto;padding:3px 4px}
+.grid td:has(> .cell),.grid td:has(.cell.name){padding:2px 4px}
+.delrow{border:0;background:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:var(--r)}
+.delrow:hover{color:var(--bad);background:var(--bad-bg)}
+.addrow{margin-left:8px;border:1px solid var(--line);background:var(--surface);color:var(--accent);font:600 11.5px var(--f-sans);border-radius:var(--r);padding:1px 8px;cursor:pointer}
+.addrow:hover{background:var(--accent-soft)}
+.views{grid-column:1/-1;display:flex;gap:2px;border-bottom:2px solid var(--line)}
+.views button{font:600 14px var(--f-sans);padding:8px 16px;border:0;background:none;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+.views button:hover{color:var(--ink)}
+.views button[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}
+main.view-schem{grid-template-columns:minmax(0,1fr)}
+main.view-schem .inputs{display:none}
 .grid select.apsel{width:auto;min-width:130px;padding:3px 6px;font-size:12.5px;border-color:transparent;background:transparent}
 .grid select.apsel:hover{border-color:var(--input-line)}
 .grid select.apsel.none{color:var(--muted)}
@@ -190,6 +208,9 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
 </header>
 
 <main>
+  <nav class="views noprint" role="tablist" aria-label="View">
+    <button role="tab" data-view="schem">Schematic</button><button role="tab" data-view="import">Import</button>
+  </nav>
   <div class="col inputs">
     <div class="ph"><h1>Build a Schematic</h1><p>Upload the RFP schedule, match its columns, and see the tower.</p></div>
 
@@ -229,7 +250,7 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
       <div data-pane="text" hidden>
         <label class="f" for="src">Paste lines, one quote per line</label>
         <textarea id="src" class="tall" spellcheck="false" placeholder="Chubb 10% of Primary $30M&#10;AIG 2.5% of $50M xs $50M [London]&#10;Beazley 10% of Primary $30M, 5% of $20M xs $30M"></textarea>
-        <div class="row" style="margin:10px 0"><button class="btn ghost sm" id="sampleTxt">Load Sample Text</button></div>
+        <div class="row" style="margin:10px 0;gap:8px"><button class="btn ghost sm" id="sampleTxt">Load Sample Text</button><button class="btn sm" data-goto="schem">Show Schematic</button></div>
         <details class="help">
           <summary>What can I paste?</summary>
           <ul>
@@ -271,7 +292,7 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
 
     <section class="card">
       <div class="card-h">
-        <div><h2>Schedule Detail</h2><p class="sub">Figures in <span style="color:var(--calc);font-style:italic">blue italics</span> weren't in the schedule and are calculated: line = share × limit, share = line ÷ limit, premium = share × 100% premium, 100% premium = premium ÷ share.</p></div>
+        <div><h2>Schedule Detail</h2><p class="sub">Click any cell to edit it; × removes a line. Figures in <span style="color:var(--calc);font-style:italic">blue italics</span> weren't in the schedule and are calculated: line = share × limit, share = line ÷ limit, premium = share × 100% premium, 100% premium = premium ÷ share.</p></div>
         <button class="btn ghost sm noprint" id="copyTsv">Copy as Table</button>
       </div>
       <div class="tbl-wrap" id="table"><div class="empty" style="border:0">No data yet.</div></div>
@@ -469,6 +490,7 @@ const S = {
   apSet: store.get("apSet",{}),          // user access point per market key
   wb: null, srcName: "", sheet: 0, hdr: 0, map: {}, rows: [],
   lib: store.get("lib",[]), cur: store.get("cur",null), snap: null,   // saved programs
+  view: store.get("view","import"),   // "schem": schematic only; "import": inputs beside it
   data: {layers:[], unread:[], calc:0}
 };
 
@@ -520,12 +542,12 @@ function sheetRows(i){
 function readFile(f){
   const name = f.name;
   if(/\.(csv|tsv|txt)$/i.test(name)){
-    f.text().then(t => { S.wb=null; loadRows(rowsFromText(t), name) });
+    f.text().then(t => { S.wb=null; loadRows(rowsFromText(t), name); setView("schem"); });
     return;
   }
   if(!window.XLSX){ toast("Excel reader still loading – try again in a moment"); return; }
   f.arrayBuffer().then(buf => {
-    try{ loadWorkbook(XLSX.read(buf, {type:"array"}), name) }
+    try{ loadWorkbook(XLSX.read(buf, {type:"array"}), name); setView("schem"); }
     catch(e){ toast("Couldn't read that file. Try saving it as .xlsx or .csv"); }
   });
 }
@@ -536,7 +558,7 @@ $("#file").addEventListener("change", e => { const f = e.target.files[0]; if(f) 
 drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if(f) readFile(f) });
 document.addEventListener("dragover", e => e.preventDefault());
 document.addEventListener("drop", e => { if(!drop.contains(e.target)){ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f){ setTab("table"); readFile(f) } } });
-$("#paste").addEventListener("paste", () => setTimeout(() => { const t=$("#paste").value; S.wb=null; if(t.trim()) loadRows(rowsFromText(t), "Pasted table"); }, 0));
+$("#paste").addEventListener("paste", () => setTimeout(() => { const t=$("#paste").value; S.wb=null; if(t.trim()){ loadRows(rowsFromText(t), "Pasted table"); setView("schem"); } }, 0));
 $("#paste").addEventListener("change", () => { const t=$("#paste").value; if(t.trim() && $("#mapArea").hidden){ S.wb=null; loadRows(rowsFromText(t), "Pasted table"); } });
 $("#newSrc").onclick = () => { $("#loadArea").hidden=false; $("#mapArea").hidden=true; $("#paste").value=""; S.rows=[]; S.wb=null; rebuild(); };
 $("#sheet").onchange = e => { S.sheet = +e.target.value; const r = sheetRows(S.sheet); loadRows(r, S.srcName, `${r.length} rows`); };
@@ -619,24 +641,24 @@ function parseQuote(seg){
   if(prm){ q.prem = money(prm[1]); rest = rest.replace(prm[0]," "); }
   const lm = rest.match(/(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)\s*(?:line|capacity|cap)\b/i);
   if(lm){ q.line = money(lm[1]); rest = rest.replace(lm[0]," "); }
-  const sm = rest.match(/([\d.]+)\s*%/);
+  const sm = rest.match(/([\d.]+)\s*%(?:\s*(?:of|p\/o|part\s+of)\b)?/i);
   if(sm){ q.share = parseFloat(sm[1]); rest = rest.replace(sm[0]," "); }
   q.L = findLayer(rest);
-  if(q.L) rest = rest.replace(q.L.match, " ");
+  if(q.L) rest = rest.replace(q.L.match, " ").replace(/\b(?:of|p\/o|part\s+of|on)\s*$/i," ");
   else if(q.share!=null || q.line!=null){
-    const om = rest.match(reOfAmount);
+    const om = rest.match(reOfAmount) || rest.match(/(\$\s*[\d,]*\.?\d+\s*(?:bn|mm|mil|m|k|b)?\b|\b[\d,]*\.?\d+\s*(?:bn|mm|mil|m)\b)/i);   // "10% of $30M": a bare amount is the primary
     if(om){ const lim = money(om[1], true); if(lim){ q.L = {limit:lim, attach:0, match:om[0]}; rest = rest.replace(om[0]," "); } }
   }
   rest = rest.replace(/\bp\/o\b|\bpart\s+of\b/ig," ");
   // an access point written as a word, unless it's part of the name ("Beazley / Lloyds", "TFP Bermuda / Fidelis")
-  if(!q.ap){
-    const am = rest.match(/(^|[^\/\w]\s*)\b(london|lloyd'?s|bermuda|wholesale|direct|captive|act|gpf|art|terrorism)\b(?!\s*\/)/i);
-    const nearSlash = am && /\/\s*$/.test(rest.slice(0, am.index + am[1].length));
-    if(am && !nearSlash && !/lloyd/i.test(am[2])){ q.ap = normAP(am[2]); rest = rest.slice(0, am.index) + am[1] + rest.slice(am.index + am[0].length); }
-  }
   q.status = statusOf(rest);
-  rest = rest.replace(/\b(ind|indication|indicative|tbc|subject|declined?|nil|no\s*quote|nq|firm|line|share|written|signed|on|of|at|for|layer\s*\d*)\b/ig," ");
-  q.name = rest.replace(/[:;,|–—\-]+/g," ").replace(/\s+/g," ").trim();
+  rest = rest.replace(/\b(ind|indication|indicative|tbc|subject|declined?|nil|no\s*quote|nq|firm|line|share|written|signed|layer\s*\d*)\b/ig," ");
+  rest = rest.replace(/^\s*(?:on|at|of|for)\b|\b(?:on|at|of|for)\s*$/ig," ");
+  let name = rest.replace(/[:;,|–—\-]+/g," ").replace(/\s+/g," ").trim();
+  // an access point as the last word ("Hamilton Bermuda"), not inside a name ("Liberty … Bermuda Limited", "Beazley / Lloyds")
+  const am = name.match(/^(.+?\S)\s+(london|bermuda|wholesale|direct|captive|act|gpf|art|terrorism)$/i);
+  if(am && !q.ap && !/(\/|\bof)\s*$/i.test(am[1])){ q.ap = normAP(am[2]); name = am[1]; }
+  q.name = name;
   return q;
 }
 function parseText(text){
@@ -762,6 +784,8 @@ function fitName(name, w, size){
 /* ================= Render ================= */
 function render(){ renderMain(); updateLib(); }
 function renderMain(){
+  $("main").classList.toggle("view-schem", S.view==="schem");
+  $$("[data-view]").forEach(b=>b.setAttribute("aria-selected", b.dataset.view===S.view));
   const {layers, unread, problem, calc} = S.data;
   const title = $("#title").value.trim();
   $("#progTitle").textContent = title || "Program Schematic";
@@ -800,6 +824,7 @@ function renderMain(){
   bindTips();
   renderLegend();
   $("#table").innerHTML = tableHtml(layers);
+  bindTable();
   $$(".apsel").forEach(s => s.onchange = () => {
     const k = s.dataset.mk; if(s.value==="__new"){ const v = prompt("New access point name (e.g. an MGA or regional office):"); if(!v){ s.value=""; return } S.apSet[k]=normAP(v); }
     else if(s.value) S.apSet[k] = s.value; else delete S.apSet[k];
@@ -819,9 +844,11 @@ function issuesHtml(layers, unread, calc){
     if(gap > 0.005) out.push(`<div class="issue"><span class="chip bad">${fmtPct(gap)} open</span>${bandName(B)} – ${fmtM(B.limit*gap/100)} of limit unplaced</div>`);
     if(gap < -0.005) out.push(`<div class="issue"><span class="chip bad">Overplaced ${fmtPct(B.placed)}</span>${bandName(B)}</div>`);
   });
+  const noPremAtAll = layers.every(L=>L.lines.every(l=>l.status==="declined" || l.prem==null));
+  if(noPremAtAll) out.push(`<div class="issue"><span class="chip warn">No premiums</span>This schedule has no premiums, so premium and ROL are left out</div>`);
   layers.forEach(L=>{
     if(L.ind > 0) out.push(`<div class="issue"><span class="chip warn">${fmtPct(L.ind)} indication</span>${layerName(L)} – not firm</div>`);
-    if(L.missingPrem) out.push(`<div class="issue"><span class="chip warn">No premium</span>${layerName(L)} – ${L.missingPrem} line${L.missingPrem>1?"s have":" has"} no premium and nothing to calculate it from</div>`);
+    if(L.missingPrem && !noPremAtAll) out.push(`<div class="issue"><span class="chip warn">No premium</span>${layerName(L)} – ${L.missingPrem} line${L.missingPrem>1?"s have":" has"} no premium and nothing to calculate it from</div>`);
   });
   if(overlap) out.push(`<div class="issue"><span class="chip info">Layers overlap</span>Quotes on ${layers.map(layerName).join(", ")} are shown as ${bands.length} stacked layers; a line on a bigger layer runs through each one it covers</div>`);
   if(calc) out.push(`<div class="issue"><span class="chip info">${calc} calculated</span>Premium worked out from share × the layer's 100% premium</div>`);
@@ -901,30 +928,64 @@ function layoutBoxes(bands, items, width, plotX, plotW){
     });
     return {blocks, opens, cols:0};
   }
-  const span = items.filter(it=>it.i1>it.i0).sort((a,b)=>(b.i1-b.i0)-(a.i1-a.i0) || a.i0-b.i0 || a.x-b.x);
-  const single = bands.map((B,i) => items.filter(it=>it.i0===i && it.i1===i).sort((a,b)=>a.x-b.x));
-  const cols = Math.max(1, span.length, ...bands.map((B,i) =>
-    span.filter(it=>it.i0<=i && it.i1>=i).length + single[i].length + (openOf(B)>0.005 ? 1 : 0)));
-  const cw = plotW/cols;
-  span.forEach((it,k) => blocks.push({it, x:plotX + k*cw, w:cw}));
-  bands.forEach((B,i) => {
-    // free stretches of this layer once the multi-layer columns are in place
-    const taken = span.map((it,k)=>({it,k})).filter(o=>o.it.i0<=i && o.it.i1>=i).map(o=>o.k).sort((a,b)=>a-b);
-    const free = []; let at = 0;
-    taken.forEach(k => { if(k > at) free.push([at, k]); at = k+1; });
-    if(at < cols) free.push([at, cols]);
-    const boxes = single[i].map(it=>({it})); if(openOf(B)>0.005) boxes.push({open:true});
-    if(!free.length) return;
-    // hand boxes to the free stretches in proportion to their width
-    const totalFree = free.reduce((s,f)=>s+f[1]-f[0],0); let given = 0;
-    free.forEach((f,fi) => {
-      const n = fi===free.length-1 ? boxes.length-given : Math.round(boxes.length*(f[1]-f[0])/totalFree);
-      const mine = boxes.slice(given, given+n); given += mine.length;
-      const x0 = plotX + f[0]*cw, wTot = (f[1]-f[0])*cw;
-      if(!mine.length){ if(openOf(B)>0.005) opens.push({i, x:x0, w:wTot, open:openOf(B), main:false}); return; }
-      const bw = wTot/mine.length;
-      mine.forEach((b,m) => { if(b.open) opens.push({i, x:x0+m*bw, w:bw, open:openOf(B), main:true}); else blocks.push({it:b.it, x:x0+m*bw, w:bw}); });
-    });
+  return layoutReadable(bands, items, width, plotX, plotW);
+}
+
+/* Readable without gaps: slice the share layout (which already tiles every layer) into vertical strips at every box
+   edge. Every strip is covered in every layer, so giving each strip one width for all layers keeps blocks straight and
+   the whole schematic a full rectangle. Strip widths are then evened out so boxes come out close to the same width. */
+function layoutReadable(bands, items, width, plotX, plotW){
+  const openOf = B => Math.max(0, 100 - B.placed);
+  const raw = [0, width, 100, ...items.flatMap(it=>[it.x, it.x+it.ln.share])].filter(v=>v>=0 && v<=width).sort((a,b)=>a-b);
+  const cuts = raw.filter((v,k)=>k===0 || v-raw[k-1] > 1e-6);
+  const n = cuts.length-1;
+  if(n < 1) return {blocks:[], opens:[], cols:0};
+  const mid = k => (cuts[k]+cuts[k+1])/2;
+  // who owns each strip in each layer: an item index, "open", or null (a hole to fill)
+  const own = bands.map(() => Array(n).fill(null));
+  items.forEach((it, idx) => { for(let b=it.i0;b<=it.i1;b++) for(let k=0;k<n;k++) if(mid(k) > it.x && mid(k) < it.x+it.ln.share) own[b][k] = idx; });
+  const ext = [];   // a carrier widened in one layer only, to close a hole beside it
+  bands.forEach((B, b) => {
+    const row = own[b];
+    if(openOf(B) > 0.005 || B.gap){ for(let k=0;k<n;k++) if(row[k]===null) row[k] = "open"; return; }
+    for(let k=0;k<n;k++){
+      if(row[k]!==null) continue;
+      let e = k; while(e+1<n && row[e+1]===null) e++;
+      const L = k>0 ? row[k-1] : null, R = e+1<n ? row[e+1] : null;
+      const single = o => typeof o==="number" && items[o].i0===b && items[o].i1===b;
+      const pick = single(L) ? L : single(R) ? R : L!==null ? L : R !== null ? R : "open";
+      for(let t=k;t<=e;t++) row[t] = pick;
+      if(typeof pick==="number" && !single(pick)) ext.push({idx:pick, b, k0:k, k1:e});
+      k = e;
+    }
+  });
+  // runs: each box in each layer as a range of strips
+  const runs = [];
+  bands.forEach((B,b) => { let k=0; while(k<n){ let e=k; while(e+1<n && own[b][e+1]===own[b][k]) e++; runs.push({b, o:own[b][k], k0:k, k1:e}); k=e+1; } });
+  const perBand = bands.map((B,b)=>runs.filter(r=>r.b===b).length);
+  const cols = Math.max(1, ...perBand);
+  // even out: nudge each strip toward what its boxes want, keeping the total width
+  let w = Array(n).fill(plotW/n);
+  const target = plotW/cols, minW = Math.min(6, plotW/n/2);
+  const runsOf = Array.from({length:n}, () => []);
+  runs.forEach(r => { for(let k=r.k0;k<=r.k1;k++) runsOf[k].push(r); });
+  for(let iter=0; iter<200; iter++){
+    const rw = runs.map(r => { let t=0; for(let k=r.k0;k<=r.k1;k++) t+=w[k]; return t; });
+    const f = runs.map((r,ri) => target/rw[ri]);
+    w = w.map((x,k) => { const fs = runsOf[k].map(r=>Math.log(f[runs.indexOf(r)])); return Math.max(minW, x*Math.exp(0.5*fs.reduce((a,c)=>a+c,0)/fs.length)); });
+    const sum = w.reduce((a,c)=>a+c,0); w = w.map(x=>x*plotW/sum);
+  }
+  const at = [plotX]; w.forEach((x,k)=>at.push(at[k]+x));
+  const blocks = [], opens = [];
+  items.forEach((it, idx) => {
+    const ks = []; for(let k=0;k<n;k++) if(mid(k) > it.x && mid(k) < it.x+it.ln.share) ks.push(k);
+    if(ks.length) blocks.push({it, x:at[ks[0]], w:at[ks[ks.length-1]+1]-at[ks[0]]});
+  });
+  ext.forEach(e => blocks.push({it:items[e.idx], ext:true, band:e.b, x:at[e.k0], w:at[e.k1+1]-at[e.k0]}));
+  bands.forEach((B,b) => {
+    const os = runs.filter(r=>r.b===b && r.o==="open").map(r=>({i:b, x:at[r.k0], w:at[r.k1+1]-at[r.k0], open:openOf(B)}));
+    const big = os.reduce((m,o)=>!m||o.w>m.w?o:m, null);
+    os.forEach(o => opens.push({...o, main:o===big}));
   });
   return {blocks, opens, cols};
 }
@@ -960,7 +1021,7 @@ function svg(layers, top){
     if(B.placed > 100.005) P.push(`<rect x="${plotX}" y="${y0+1}" width="${plotW}" height="${h-2}" fill="none" stroke="${C.bad}" stroke-width="2" rx="3"/>`);
     const sx = plotX + plotW + 14;
     const sl = B.gap ? [["Gap", 12, 700, C.bad], ["no layer quoted", 11, 400, C.bad]]
-      : [[fmt$(B.prem), 12, 700, C.navy], [fmtPct(B.placed)+" placed", 11, 400, (B.placed<99.995||B.placed>100.005)?C.bad:C.muted]];
+      : [[B.premShare>0 ? fmt$(B.prem) : "–", 12, 700, C.navy], [fmtPct(B.placed)+" placed", 11, 400, (B.placed<99.995||B.placed>100.005)?C.bad:C.muted]];
     if(!B.gap && B.rol && h>=56) sl.push([`ROL ${fmtPct(B.rol)}`, 11, 400, C.muted]);
     let sy = y0 + h/2 - (sl.length-1)*7 + 4;
     sl.forEach(([t,s,w,c]) => { P.push(`<text x="${sx}" y="${sy}" font-size="${s}" font-weight="${w}" fill="${c}">${esc(t)}</text>`); sy+=14; });
@@ -983,7 +1044,12 @@ function svg(layers, top){
   });
 
   // carrier blocks
-  blocks.forEach(bk => {
+  // a carrier widened in one layer to close a hole: same colour, no label
+  blocks.filter(bk=>bk.ext).forEach(bk => {
+    const g = colourOf(bk.it.ln), y0 = yTop[bk.band], h = heights[bk.band];
+    P.push(`<rect x="${bk.x-1}" y="${y0+1}" width="${Math.max(0,bk.w)}" height="${h-2}" fill="${mix(g, C.surface, bk.it.ln.status==="indication" ? .16 : .34)}"/>`);
+  });
+  blocks.filter(bk=>!bk.ext).forEach(bk => {
     const {it} = bk, {ln, L} = it, y0 = yTop[it.i1], h = yBot[it.i0] - y0, spans = it.i1 - it.i0 + 1;
     const g = colourOf(ln), fill = mix(g, C.surface, ln.status==="indication" ? .16 : .34);
     const lineAmt = L.limit*ln.share/100;
@@ -1061,20 +1127,83 @@ function layerStatus(L){
 }
 function tableHtml(layers){
   const aps = [...new Set([...AP, ...apList().filter(a=>a!==NONE)])];
-  let h = `<table class="grid"><thead><tr><th>Layer / Market</th><th>Access Point</th><th class="r">Share</th><th class="r">Line</th><th class="r">Premium</th><th class="r">100% Premium</th><th>Status</th><th>Notes</th></tr></thead><tbody>`;
-  [...layers].reverse().forEach(L=>{
-    h += `<tr class="lh"><td>${layerName(L)}${L.label?" · "+esc(L.label):""}</td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmt$(L.limit*L.placed/100)}</td><td class="r">${fmt$(L.prem)}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${layerStatus(L)}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td></tr>`;
+  const inp = (f, v, cls) => `<input class="cell${cls?" "+cls:""}" data-f="${f}" value="${esc(v)}" aria-label="${f}">`;
+  let h = `<table class="grid"><thead><tr><th>Layer / Market</th><th>Access Point</th><th class="r">Share</th><th class="r">Line</th><th class="r">Premium</th><th class="r">100% Premium</th><th>Status</th><th>Notes</th><th class="noprint"></th></tr></thead><tbody>`;
+  let xi = 0;   // same order as exportRows, so a row can be found again once the table becomes editable
+  [...layers].reverse().forEach((L, li) => {
+    h += `<tr class="lh"><td>${layerName(L)}${L.label?" · "+esc(L.label):""} <button class="addrow noprint" data-li="${li}" title="Add a carrier to this layer">+ Carrier</button></td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmt$(L.limit*L.placed/100)}</td><td class="r">${fmt$(L.prem)}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${layerStatus(L)}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td><td class="noprint"></td></tr>`;
     L.lines.forEach(x=>{
       const k = mkey(x.market), dec = x.status==="declined";
       const sw = dec ? `<span class="sw" style="border:1px solid var(--line)"></span>` : `<span class="sw" style="background:${colourOf(x)}"></span>`;
-      h += `<tr><td><span style="display:inline-flex;align-items:center;gap:8px">${sw}${esc(x.market)}</span></td>
-        <td><select class="apsel noprint${x.ap?"":" none"}" data-mk="${esc(k)}"><option value="">${NONE}</option>${aps.map(a=>`<option${a===x.ap?" selected":""}>${esc(a)}</option>`).join("")}<option value="__new">+ Add access point…</option></select></td>
-        <td class="r${!dec&&x.shareCalc?" calc":""}">${dec?"–":fmtPct(x.share,4)}</td><td class="r${!dec&&x.lineCalc&&x.share?" calc":""}">${dec?"–":fmt$(L.limit*x.share/100)}</td>
-        <td class="r${x.premCalc?" calc":""}">${dec?"–":fmt$(x.prem)}</td><td class="r${!dec&&x.priceCalc?" calc":""}">${dec?"–":fmt$(x.price100)}</td>
-        <td>${x.status==="firm"?"Firm":x.status==="indication"?"Indication":"Declined"}</td><td>${esc(x.note||"")}</td></tr>`;
+      h += `<tr data-xi="${xi++}" data-row="${x.row-1}"><td><span style="display:flex;align-items:center;gap:6px">${sw}${inp("market", x.market, "name")}</span></td>
+        <td><select class="apsel noprint${x.ap?"":" none"}" data-f="ap" data-mk="${esc(k)}"><option value="">${NONE}</option>${aps.map(a=>`<option${a===x.ap?" selected":""}>${esc(a)}</option>`).join("")}<option value="__new">+ Add access point…</option></select></td>
+        <td class="r${!dec&&x.shareCalc?" calc":""}">${inp("share", dec||!x.share ? "" : fmtPct(x.share,4))}</td>
+        <td class="r${!dec&&x.lineCalc&&x.share?" calc":""}">${inp("line", dec||!x.share ? "" : fmt$(L.limit*x.share/100))}</td>
+        <td class="r${x.premCalc?" calc":""}">${inp("prem", dec||x.prem==null ? "" : fmt$(x.prem))}</td>
+        <td class="r${!dec&&x.priceCalc?" calc":""}">${inp("price", dec||x.price100==null ? "" : fmt$(x.price100))}</td>
+        <td><select class="cell st" data-f="status">${["Firm","Indication","Declined"].map(o=>`<option${o.toLowerCase()===x.status?" selected":""}>${o}</option>`).join("")}</select></td>
+        <td>${inp("note", x.note||"", "note")}</td>
+        <td class="noprint"><button class="delrow" title="Remove this line" aria-label="Remove ${esc(x.market)}">×</button></td></tr>`;
     });
   });
-  return h + `</tbody></table>`;
+  return h + `</tbody></table><div class="noprint" style="padding:8px"><button class="btn ghost sm" id="addLayer">+ Add Layer</button></div>`;
+}
+
+/* ================= Editing the schedule in place ================= */
+// Once edited, the schedule becomes this program's own table (the Excel export layout), so edits stick and save.
+const editable = () => S.tab==="table" && S.map.__export && S.rows.length>0;
+function toEditable(){
+  if(editable()) return;
+  const name = $("#title").value.trim() || "Program";
+  S.rows = exportRows(name); S.map = {...EXPORT_MAP}; S.hdr = 0; S.wb = null; S.srcName = "Edited schedule";
+  S.tab = "table"; store.set("tab", "table");
+  $("#srcName").textContent = S.srcName; $("#srcInfo").textContent = "edited in the table"; $("#hdr").value = 1;
+  $("#sheetWrap").hidden = true; $("#loadArea").hidden = true; $("#mapArea").hidden = false;
+  renderMap();
+}
+function rowOf(tr){ if(editable()) return +tr.dataset.row; const xi = +tr.dataset.xi; toEditable(); return xi + 1; }
+function editCell(tr, f, v){
+  const r = rowOf(tr), row = S.rows[r]; if(!row) return;
+  const calc = String(row[12]||"").split(/,\s*/).filter(Boolean);
+  const drop = n => { const k = calc.indexOf(n); if(k>=0) calc.splice(k,1); };
+  v = String(v).trim();
+  if(f==="market") row[4] = v || "Unnamed market";
+  else if(f==="status") row[10] = v;
+  else if(f==="note") row[11] = v;
+  else if(f==="share"){ const n = pctNum(v); row[6] = n==null ? "" : n/100; drop("Share %"); row[7] = ""; drop("Line $"); }   // line follows the share
+  else if(f==="line"){ const n = money(v); row[7] = n==null ? "" : n; drop("Line $"); if(n!=null){ row[6] = ""; drop("Share %"); } }
+  else if(f==="prem"){ const n = money(v); row[8] = n==null ? "" : n; drop("Premium"); }
+  else if(f==="price"){ const n = money(v); row[9] = n==null ? "" : n; drop("100% Premium"); }
+  row[12] = calc.join(", ");
+}
+function addRow(L){
+  toEditable();
+  S.rows.push([$("#title").value.trim()||"Program", layerName(L), L.limit, L.attach, "New carrier", "", 0, "", "", "", "Firm", "", ""]);
+  rebuild();
+  const tr = $$("#table tr[data-row]").find(t => +t.dataset.row===S.rows.length-1);
+  const n = tr && tr.querySelector('[data-f="market"]'); if(n){ n.focus(); n.select(); }
+}
+function bindTable(){
+  // after an edit the table redraws; put the cursor back where the person was going
+  const refocus = () => {
+    const a = document.activeElement, tr = a && a.closest && a.closest("tr[data-xi]");
+    const key = tr && a.dataset.f ? [tr.dataset.xi, a.dataset.f] : null;
+    rebuild();
+    if(key){ const t = $(`#table tr[data-xi="${key[0]}"] [data-f="${key[1]}"]`); if(t){ t.focus(); if(t.select) t.select(); } }
+  };
+  $$("#table .cell").forEach(el => {
+    el.onchange = () => { editCell(el.closest("tr"), el.dataset.f, el.value); setTimeout(refocus, 0); };
+    if(el.tagName==="INPUT") el.onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); el.blur(); } if(e.key==="Escape"){ el.value = el.defaultValue; el.blur(); } };
+  });
+  $$("#table .delrow").forEach(b => b.onclick = () => { const r = rowOf(b.closest("tr")); S.rows.splice(r, 1); rebuild(); });
+  const layersTop = [...S.data.layers].reverse();
+  $$("#table .addrow").forEach(b => b.onclick = () => addRow(layersTop[+b.dataset.li]));
+  const al = $("#addLayer"); if(al) al.onclick = () => {
+    const t = prompt("New layer, e.g. $25M xs $75M or Primary $30M:"); if(!t) return;
+    const L = findLayer(t) || (money(t,true) ? {limit:money(t,true), attach:0} : null);
+    if(!L){ toast("Couldn't read that layer – try \"$25M xs $75M\""); return; }
+    addRow(L);
+  };
 }
 
 /* ================= Tooltips ================= */
@@ -1124,7 +1253,7 @@ function exportRows(name){
       if(x.priceCalc) calc.push("100% Premium");
     }
     rows.push([name, layerName(L), L.limit, L.attach, x.market, x.ap||"",
-      dec||!x.share ? "" : x.share/100,
+      dec ? "" : (x.share||0)/100,
       dec||!x.share ? "" : Math.round(L.limit*x.share/100),
       dec||x.prem==null ? "" : Math.round(x.prem),
       dec||x.price100==null ? "" : Math.round(x.price100),
@@ -1175,9 +1304,11 @@ function loadProgram(name){
   p.rows.slice(1).forEach(r => { delete S.apSet[mkey(r[4])]; }); store.set("apSet", S.apSet);
   loadRows(p.rows.map(r=>r.slice()), name, "Saved program");
   S.snap = JSON.stringify(exportRows(name));
+  S.view = "schem"; store.set("view", "schem");
   render();
 }
 function newProgram(){
+  S.view = "import"; store.set("view", "import");
   S.cur = null; store.set("cur", null);
   $("#title").value = ""; store.set("title", "");
   $("#src").value = ""; store.set("src", "");
@@ -1233,6 +1364,12 @@ $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.7", date:"2026-11-17", notes:[
+    "Readable layout has no empty gaps: every layer fills the full width, so it's always a clean rectangle",
+    "Edit the schedule in place: click any cell (carrier, share, line, premium, 100% premium, status, notes), add a carrier to a layer, add a layer, or remove a line",
+    "Schematic and Import are now separate tabs; loading a file, a paste, the sample or a saved program goes straight to the schematic",
+    "Quick Add Text keeps names like \"Lloyd's of London\" and \"Liberty Specialty Markets Bermuda Limited\" whole",
+    "A schedule with no premiums shows one note instead of a warning per layer"]},
   {v:"1.6", date:"2026-11-17", notes:[
     "Quick Add Text takes the layer on the same line: \"Chubb 10% of Primary $30M\", \"AIG 2.5% of $50M xs $50M\", \"Zurich 15% of $30M\"",
     "One carrier on several layers in one line: \"Beazley 10% of Primary $30M, 5% of $20M xs $30M\"",
@@ -1311,10 +1448,12 @@ Sompo declined`;
 /* ================= Wiring ================= */
 function setTab(t){ S.tab = t; store.set("tab", t); rebuild(); }
 $$("[data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+function setView(v){ S.view = v; store.set("view", v); render(); }
+$$("[data-view],[data-goto]").forEach(b=>b.onclick=()=>setView(b.dataset.view||b.dataset.goto));
 $$("[data-colby]").forEach(b=>b.onclick=()=>{ S.colby=b.dataset.colby; store.set("colby2",S.colby); render() });
 $$("[data-scale]").forEach(b=>b.onclick=()=>{ S.scale=b.dataset.scale; store.set("scale",S.scale); render() });
 $$("[data-lbl]").forEach(b=>b.onclick=()=>{ S.lbl=b.dataset.lbl; store.set("lbl",S.lbl); render() });
-$("#sampleTbl").onclick = ()=>{ if(!$("#title").value) $("#title").value="Sample Property Program"; S.wb=null; loadRows(SAMPLE_TBL.map(r=>r.slice()), "Sample schedule.xlsx", "15 rows"); };
+$("#sampleTbl").onclick = ()=>{ if(!$("#title").value) $("#title").value="Sample Property Program"; S.wb=null; loadRows(SAMPLE_TBL.map(r=>r.slice()), "Sample schedule.xlsx", "15 rows"); setView("schem"); };
 $("#sampleTxt").onclick = ()=>{ $("#src").value = SAMPLE_TXT; if(!$("#title").value) $("#title").value="Sample Property Program"; store.set("src", SAMPLE_TXT); rebuild(); };
 let tmr; $("#src").addEventListener("input", ()=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ store.set("src",$("#src").value); rebuild() },150) });
 $("#title").addEventListener("input", ()=>{ store.set("title",$("#title").value); render() });
@@ -1325,6 +1464,7 @@ $("#title").value = store.get("title","");
 applyTheme(store.get("theme","auto"));
 rebuild();
 if(S.cur && S.lib.some(p=>p.name===S.cur)) loadProgram(S.cur);
+if(!S.data.layers.length && S.view==="schem") setView("import");   // nothing to show yet
 })();
 </script>
 </body>

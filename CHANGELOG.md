@@ -2,6 +2,13 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.7 – 2026-11-17
+- Readable layout has no empty gaps: every layer fills the full width, so it's always a clean rectangle
+- Edit the schedule in place: click any cell (carrier, share, line, premium, 100% premium, status, notes), add a carrier to a layer, add a layer, or remove a line
+- Schematic and Import are now separate tabs; loading a file, a paste, the sample or a saved program goes straight to the schematic
+- Quick Add Text keeps names like "Lloyd's of London" and "Liberty Specialty Markets Bermuda Limited" whole
+- A schedule with no premiums shows one note instead of a warning per layer
+
 ## v1.6 – 2026-11-17
 - Quick Add Text takes the layer on the same line: "Chubb 10% of Primary $30M", "AIG 2.5% of $50M xs $50M", "Zurich 15% of $30M"
 - One carrier on several layers in one line: "Beazley 10% of Primary $30M, 5% of $20M xs $30M"
