@@ -123,7 +123,9 @@ textarea.tall{min-height:300px}
 .issues:empty{display:none}
 .issue{font-size:13px;display:flex;gap:8px;align-items:baseline}
 .sch-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin-bottom:14px}
+#schem{overflow-x:auto}
 #schem svg{display:block;width:100%;height:auto}
+#schem svg.wide{width:auto;max-width:none}
 .empty{padding:48px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:var(--r)}
 .sch-legend{list-style:none;display:flex;flex-wrap:wrap;gap:6px 16px;margin:12px 0 0;padding:0;font-size:13px}
 .sch-legend li{display:flex;align-items:center;gap:6px}
@@ -165,6 +167,8 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
   main{display:block;padding:0}
   body{background:#fff}
   .card{border:0;padding:0}
+  #schem{overflow:visible}
+  #schem svg.wide{width:100%}
 }
 </style>
 </head>
@@ -255,7 +259,7 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
       <div class="issues" id="issues"></div>
       <div class="sch-ctl noprint">
         <div class="seg-ctl"><span class="l">Colour by</span><button data-colby="ap">Access Point</button><button data-colby="mkt">Each Market</button></div>
-        <div class="seg-ctl"><span class="l">Height</span><button data-scale="uniform">Uniform</button><button data-scale="prop">To Scale</button></div>
+        <div class="seg-ctl"><span class="l">Layout</span><button data-scale="uniform" title="Every layer the same height; box width = share">Uniform</button><button data-scale="prop" title="Layer height in proportion to its limit; box width = share">To Scale</button><button data-scale="read" title="Every carrier the same width so names and premiums fit">Readable</button></div>
         <div class="seg-ctl"><span class="l">Show</span><button data-lbl="share">Share</button><button data-lbl="prem">Premium</button><button data-lbl="line">Line $</button></div>
       </div>
       <div id="schem"><div class="empty">Upload or paste a schedule to build the schematic.</div></div>
@@ -723,7 +727,7 @@ function tw(s, size, weight){ mctx.font = `${weight||400} ${size}px ${FONT}`; re
 function fitName(name, w, size){
   const words = name.split(" "), c = [name];
   for(let k=words.length-1;k>=1;k--){ const t = words.slice(0,k).join(" ").replace(/[\s\/&,(-]+$/,""); if(t) c.push(t); }
-  if(words.length>1) c.push(words.map(x=>x[0]).join("").toUpperCase());
+  if(words.length>1) c.push(words.map(x=>x.replace(/[^A-Za-z0-9]/g,"")[0]).filter(Boolean).join("").toUpperCase());
   for(const x of c) if(tw(x,size,700) <= w) return x;
   return null;
 }
@@ -738,6 +742,7 @@ function renderMain(){
   $$("[data-colby]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.colby===S.colby));
   $$("[data-scale]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.scale===S.scale));
   $$("[data-lbl]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.lbl===S.lbl));
+  $("[data-lbl]").parentElement.hidden = S.scale==="read";   // Readable shows share, premium and 100% premium together
   $$("[data-tab]").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===S.tab));
   $$("[data-pane]").forEach(p=>p.hidden = p.dataset.pane!==S.tab);
 
@@ -833,19 +838,86 @@ function makeBands(layers){
 }
 const bandName = B => B.attach===0 ? "P"+fmtM(B.limit) : fmtM(B.limit)+" xs "+fmtM(B.attach);
 
+// name wrapped onto up to three lines, never cut mid-word
+function wrapName(name, w, size, maxLines=3){
+  if(tw(name,size,700) <= w) return [name];
+  const words = name.replace(/\s+([\/&])\s+/g, " $1\u00a0").split(" "), out = []; let cur = "";   // keep "/" and "&" with a neighbour
+  for(const wd of words){
+    const t = cur ? cur+" "+wd : wd;
+    if(tw(t,size,700) <= w) cur = t;
+    else { if(cur) out.push(cur); cur = wd; }
+  }
+  if(cur) out.push(cur);
+  if(out.length > maxLines || out.some(l=>tw(l,size,700) > w)){
+    return null;
+  }
+  return out.map(l=>l.replace(/\u00a0/g," "));
+}
+const firstFit = (opts, w, size, wt) => opts.find(t => tw(t,size,wt||400) <= w) || null;
+
+/* Box positions. Uniform / To scale: width = share of the layer.
+   Readable: every carrier the same width so names and figures fit. Lines across several layers are placed first and
+   keep their column all the way up; in each layer the other boxes (and any open space, as one more box) share the
+   width left over, so every layer fills the full width and the whole schematic is a clean rectangle. */
+function layoutBoxes(bands, items, width, plotX, plotW){
+  const blocks = [], opens = [];
+  const openOf = B => Math.max(0, 100 - B.placed);
+  if(S.scale !== "read"){
+    const X = v => plotX + plotW*v/width;
+    items.forEach(it => blocks.push({it, x:X(it.x), w:X(it.x+it.ln.share)-X(it.x)}));
+    bands.forEach((B,i) => {
+      const occ = [...B.occ].sort((a,b)=>a[0]-b[0]), free = []; let at = 0;
+      occ.forEach(([a,b]) => { if(a > at+1e-7) free.push([at, Math.min(a,100)]); at = Math.max(at, b); });
+      if(at < 100-1e-7) free.push([at, 100]);
+      const segs = free.filter(f=>f[1]-f[0] > 1e-7), big = [...segs].sort((a,b)=>(b[1]-b[0])-(a[1]-a[0]))[0];
+      segs.forEach(f => opens.push({i, x:X(f[0]), w:X(f[1])-X(f[0]), open:openOf(B), main: f===big}));
+    });
+    return {blocks, opens, cols:0};
+  }
+  const span = items.filter(it=>it.i1>it.i0).sort((a,b)=>(b.i1-b.i0)-(a.i1-a.i0) || a.i0-b.i0 || a.x-b.x);
+  const single = bands.map((B,i) => items.filter(it=>it.i0===i && it.i1===i).sort((a,b)=>a.x-b.x));
+  const cols = Math.max(1, span.length, ...bands.map((B,i) =>
+    span.filter(it=>it.i0<=i && it.i1>=i).length + single[i].length + (openOf(B)>0.005 ? 1 : 0)));
+  const cw = plotW/cols;
+  span.forEach((it,k) => blocks.push({it, x:plotX + k*cw, w:cw}));
+  bands.forEach((B,i) => {
+    // free stretches of this layer once the multi-layer columns are in place
+    const taken = span.map((it,k)=>({it,k})).filter(o=>o.it.i0<=i && o.it.i1>=i).map(o=>o.k).sort((a,b)=>a-b);
+    const free = []; let at = 0;
+    taken.forEach(k => { if(k > at) free.push([at, k]); at = k+1; });
+    if(at < cols) free.push([at, cols]);
+    const boxes = single[i].map(it=>({it})); if(openOf(B)>0.005) boxes.push({open:true});
+    if(!free.length) return;
+    // hand boxes to the free stretches in proportion to their width
+    const totalFree = free.reduce((s,f)=>s+f[1]-f[0],0); let given = 0;
+    free.forEach((f,fi) => {
+      const n = fi===free.length-1 ? boxes.length-given : Math.round(boxes.length*(f[1]-f[0])/totalFree);
+      const mine = boxes.slice(given, given+n); given += mine.length;
+      const x0 = plotX + f[0]*cw, wTot = (f[1]-f[0])*cw;
+      if(!mine.length){ if(openOf(B)>0.005) opens.push({i, x:x0, w:wTot, open:openOf(B), main:false}); return; }
+      const bw = wTot/mine.length;
+      mine.forEach((b,m) => { if(b.open) opens.push({i, x:x0+m*bw, w:bw, open:openOf(B), main:true}); else blocks.push({it:b.it, x:x0+m*bw, w:bw}); });
+    });
+  });
+  return {blocks, opens, cols};
+}
+
 function svg(layers, top){
   const C = { ink:toHex(cssv("--ink")), muted:toHex(cssv("--muted")), line:toHex(cssv("--line")), surface:toHex(cssv("--surface")),
               bad:toHex(cssv("--bad")), badbg:toHex(cssv("--bad-bg")), navy:toHex(cssv("--navy")), sub:toHex(cssv("--sb-sub")) };
-  const {bands, items, width} = S.bands;
-  const W = Math.max(600, Math.min($("#schem").clientWidth, 1600));
-  const axisW = 110, sideW = 150, plotX = axisW, plotW = W - axisW - sideW - 12;
-  const uniH = 92, minH = 58;
-  const heights = bands.map(B => S.scale==="uniform" ? uniH : Math.max(minH, (B.limit/top) * Math.max(380, bands.length*105)));
+  const {bands, items, width} = S.bands, read = S.scale==="read";
+  const axisW = 110, sideW = 150, plotX = axisW, fit = Math.max(600, Math.min($("#schem").clientWidth, 1600));
+  // Readable keeps columns wide enough to read; past the space available the schematic scrolls sideways
+  const minCol = 92, cols = read ? layoutBoxes(bands, items, width, 0, 1).cols : 0;
+  const W = Math.max(fit, read ? axisW + sideW + 12 + cols*minCol : 0), wide = W > fit;
+  const plotW = W - axisW - sideW - 12;
+  const uniH = read ? 128 : 92, minH = 58;
+  const heights = bands.map(B => S.scale==="prop" ? Math.max(minH, (B.limit/top) * Math.max(380, bands.length*105)) : uniH);
   const H = heights.reduce((a,b)=>a+b,0), padT = 6, padB = 30, total = H + padT + padB;
   const yTop = [], yBot = [];
   let y = padT + H;
   bands.forEach((B,i) => { yBot[i] = y; y -= heights[i]; yTop[i] = y; });
-  const X = v => plotX + plotW*v/width;
+  const {blocks, opens} = layoutBoxes(bands, items, width, plotX, plotW);
   const P = [];
   P.push(`<defs><pattern id="gap" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="${C.badbg}"/><line x1="0" y1="0" x2="0" y2="7" stroke="${C.bad}" stroke-width="1.6" opacity=".35"/></pattern></defs>`);
   P.push(`<rect width="${W}" height="${total}" fill="${C.surface}"/>`);
@@ -853,30 +925,12 @@ function svg(layers, top){
 
   bands.forEach((B, i) => {
     const y0 = yTop[i], h = heights[i];
-    // left: band name
     const yl = [[bandName(B), 12, 700, C.navy]];
     if(B.label && h>=64) yl.unshift([B.label, 11, 400, C.muted]);
     let ty = y0 + h/2 - (yl.length-1)*7 + 4;
     yl.forEach(([t,s,w,c]) => { let txt=t; while(tw(txt,s,w)>axisW-14 && txt.includes(" ")) txt=txt.split(" ").slice(0,-1).join(" "); P.push(`<text x="${axisW-10}" y="${ty}" text-anchor="end" font-size="${s}" font-weight="${w}" fill="${c}">${esc(txt)}</text>`); ty+=14; });
     P.push(`<line x1="${plotX}" x2="${plotX+plotW}" y1="${yBot[i]}" y2="${yBot[i]}" stroke="${C.line}"/>`);
-    // open space: whatever of 0–100% no line covers
-    const occ = [...B.occ].sort((a,b)=>a[0]-b[0]), free = []; let at = 0;
-    occ.forEach(([a,b]) => { if(a > at+1e-7) free.push([at, Math.min(a,100)]); at = Math.max(at, b); });
-    if(at < 100-1e-7) free.push([at, 100]);
-    const open = Math.max(0, 100 - B.placed), big = free.filter(f=>f[1]>f[0]).sort((a,b)=>(b[1]-b[0])-(a[1]-a[0]))[0];
-    free.forEach(([a,b]) => {
-      if(b-a < 1e-7) return;
-      const x0 = X(a), w = X(b)-x0;
-      P.push(`<g data-tip="${esc(fmtPct(open)+" open on "+bandName(B)+"\n"+fmtM(B.limit*open/100)+" of limit unplaced")}"><rect x="${x0+1}" y="${y0+1}" width="${Math.max(0,w-2)}" height="${h-2}" rx="3" fill="url(#gap)"/>`);
-      if(big && a===big[0] && b===big[1]){
-        const t = fmtPct(open)+" open";
-        if(tw(t,11,700) <= w-10) label(x0+w/2, y0+h/2, [[t,11,700,C.bad]]);
-        else if(tw(fmtPct(open),11,700) <= w-6) label(x0+w/2, y0+h/2, [[fmtPct(open),11,700,C.bad]]);
-      }
-      P.push(`</g>`);
-    });
     if(B.placed > 100.005) P.push(`<rect x="${plotX}" y="${y0+1}" width="${plotW}" height="${h-2}" fill="none" stroke="${C.bad}" stroke-width="2" rx="3"/>`);
-    // right: premium for this band (lines across several bands split by limit)
     const sx = plotX + plotW + 14;
     const sl = B.gap ? [["Gap", 12, 700, C.bad], ["no layer quoted", 11, 400, C.bad]]
       : [[fmt$(B.prem), 12, 700, C.navy], [fmtPct(B.placed)+" placed", 11, 400, (B.placed<99.995||B.placed>100.005)?C.bad:C.muted]];
@@ -885,36 +939,75 @@ function svg(layers, top){
     sl.forEach(([t,s,w,c]) => { P.push(`<text x="${sx}" y="${sy}" font-size="${s}" font-weight="${w}" fill="${c}">${esc(t)}</text>`); sy+=14; });
   });
 
+  // open space
+  opens.forEach(o => {
+    const B = bands[o.i], y0 = yTop[o.i], h = heights[o.i];
+    if(o.w < 1) return;
+    P.push(`<g data-tip="${esc(fmtPct(o.open)+" open on "+bandName(B)+"\n"+fmtM(B.limit*o.open/100)+" of limit unplaced")}"><rect x="${o.x+1}" y="${y0+1}" width="${Math.max(0,o.w-2)}" height="${h-2}" rx="3" fill="url(#gap)"/>`);
+    if(o.main){
+      const t = firstFit([fmtPct(o.open)+" open", fmtPct(o.open)], o.w-8, 11, 700);
+      if(t){
+        const rows = [[t,11,700,C.bad]];
+        if(read && h>=70){ const amt = firstFit([fmtM(B.limit*o.open/100)+" unplaced", fmtM(B.limit*o.open/100)], o.w-8, 11); if(amt) rows.push([amt,11,400,C.bad]); }
+        label(o.x+o.w/2, y0+h/2, rows);
+      }
+    }
+    P.push(`</g>`);
+  });
+
   // carrier blocks
-  items.forEach(it => {
-    const {ln, L} = it, y0 = yTop[it.i1], h = yBot[it.i0] - y0, spans = it.i1 - it.i0 + 1;
+  blocks.forEach(bk => {
+    const {it} = bk, {ln, L} = it, y0 = yTop[it.i1], h = yBot[it.i0] - y0, spans = it.i1 - it.i0 + 1;
     const g = colourOf(ln), fill = mix(g, C.surface, ln.status==="indication" ? .16 : .34);
-    const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}${spans>1?` · runs through ${spans} layers`:""}\nLine ${fmt$(L.limit*ln.share/100)} · Premium ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
-    const bx = X(it.x)+1, by = y0+1, bw = Math.max(0, X(it.x+ln.share)-X(it.x)-2), bh = h-2;
+    const lineAmt = L.limit*ln.share/100;
+    const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}${spans>1?` · runs through ${spans} layers`:""}\nLine ${fmt$(lineAmt)}\nPremium for their share ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}\n100% layer premium ${fmt$(ln.price100)}${ln.priceCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
+    const bx = bk.x+1, by = y0+1, bw = Math.max(0, bk.w-2), bh = h-2;
     P.push(`<g data-tip="${esc(tip)}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="${fill}"/>`);
     if(ln.status==="indication") P.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="none" stroke="${g}" stroke-dasharray="3 2"/>`);
     if(bw>3) P.push(`<rect x="${bx}" y="${by}" width="3" height="${bh}" fill="${g}"/>`);
     const inner = bw - 10, cx = bx + 1.5 + bw/2;
-    const val = S.lbl==="prem" ? (ln.prem!=null ? fmtM(ln.prem) : "–") : S.lbl==="line" ? fmtM(L.limit*ln.share/100) : fmtPct(ln.share);
-    const nameFit = inner>12 ? fitName(ln.market, inner, 11) : null;
-    const rows = [];
-    if(nameFit && h>=34) rows.push([nameFit, 11, 700, C.ink]);
-    if(tw(val,11,400) <= inner) rows.push([val, 11, 400, C.sub]);
-    if(spans>1 && h>=80 && tw(layerName(L),10,400) <= inner) rows.push([layerName(L),10,400,C.muted]);
-    if(ln.status==="indication" && h>=58 && tw("Indication",10,400)<=inner) rows.push(["Indication",10,400,C.muted]);
-    if(!nameFit && bw >= 13){
-      // too narrow for a name across: write it up the block if it fits that way
-      const up = fitName(ln.market, bh-12, 11);
-      if(up){ const vy = y0+h/2; P.push(`<text transform="translate(${cx+4} ${vy}) rotate(-90)" text-anchor="middle" font-size="11" font-weight="700" fill="${C.ink}">${esc(up)}</text>`); }
-    } else label(cx, y0+h/2, rows);
+    if(read){
+      // name, share and line, their premium, the 100% layer premium
+      // name: wrapped at 11px, else a size smaller, else shortened
+      let rows = null;
+      for(const fs of [11,10,9]){ const w = wrapName(ln.market, inner, fs); if(w){ rows = w.map(t=>[t,fs,700,C.ink]); break; } }
+      if(!rows){ const f = fitName(ln.market, inner, 10); rows = f ? [[f,10,700,C.ink]] : []; }
+      const sh = firstFit([`${fmtPct(ln.share)} · ${fmtM(lineAmt)}`, fmtPct(ln.share)], inner, 11); if(sh) rows.push([sh,11,400,C.sub]);
+      const pr = ln.prem!=null ? firstFit([`Prem ${fmtM(ln.prem)}`, fmtM(ln.prem)], inner, 11) : null;
+      const pc = ln.price100!=null ? firstFit([`100% ${fmtM(ln.price100)}`, fmtM(ln.price100)], inner, 11) : null;
+      if(pr) rows.push([pr,11,400,ln.premCalc?toHex(cssv("--calc")):C.sub]);
+      if(pc) rows.push([pc,11,400,C.muted]);
+      if(spans>1 && tw(layerName(L),10,400) <= inner) rows.push([layerName(L),10,400,C.muted]);
+      if(ln.status==="indication" && tw("Indication",10,400) <= inner) rows.push(["Indication",10,400,C.muted]);
+      // drop the least important lines until it fits
+      const drop = () => { const order = [r=>r[0]==="Indication", r=>r[0]===layerName(L), r=>r[0]===pc, r=>r[0]===pr]; for(const f of order){ const k = rows.findIndex(f); if(k>=0){ rows.splice(k,1); return true; } } return false; };
+      while(rows.length*14 > bh-8 && drop());
+      label(cx, y0+h/2, rows);
+    } else {
+      const val = S.lbl==="prem" ? (ln.prem!=null ? fmtM(ln.prem) : "–") : S.lbl==="line" ? fmtM(lineAmt) : fmtPct(ln.share);
+      const nameFit = inner>12 ? fitName(ln.market, inner, 11) : null;
+      const rows = [];
+      if(nameFit && h>=34) rows.push([nameFit, 11, 700, C.ink]);
+      if(tw(val,11,400) <= inner) rows.push([val, 11, 400, C.sub]);
+      if(spans>1 && h>=80 && tw(layerName(L),10,400) <= inner) rows.push([layerName(L),10,400,C.muted]);
+      if(ln.status==="indication" && h>=58 && tw("Indication",10,400)<=inner) rows.push(["Indication",10,400,C.muted]);
+      if(!nameFit && bw >= 13){
+        const up = fitName(ln.market, bh-12, 11);
+        if(up) P.push(`<text transform="translate(${cx+4} ${y0+h/2}) rotate(-90)" text-anchor="middle" font-size="11" font-weight="700" fill="${C.ink}">${esc(up)}</text>`);
+      } else label(cx, y0+h/2, rows);
+    }
     P.push(`</g>`);
   });
 
   P.push(`<line x1="${plotX}" x2="${plotX}" y1="${padT}" y2="${padT+H}" stroke="${C.line}"/>`);
   P.push(`<text x="${axisW-10}" y="${padT+10}" text-anchor="end" font-size="11" fill="${C.muted}">${fmtM(top)}</text>`);
   const ttl = $("#title").value.trim();
-  P.push(`<text x="${plotX}" y="${total-10}" font-size="11" fill="${C.muted}">${esc(ttl?ttl+" · ":"")}Premium ${fmt$(layers.reduce((s,L)=>s+L.prem,0))} · ${S.scale==="uniform"?"Layers at equal height":"Layer height to scale"}</text>`);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${total}" width="${W}" height="${total}" font-family='${FONT}'>${P.join("")}</svg>`;
+  const how = read ? ["Readable: equal widths, not to share · figures: share · line, their premium, 100% layer premium", "Readable: equal widths, not to share", "Readable"]
+    : [S.scale==="uniform" ? "Layers at equal height" : "Layer height to scale"];
+  const head = `${ttl?ttl+" · ":""}Premium ${fmt$(layers.reduce((s,L)=>s+L.prem,0))} · `;
+  const foot = how.map(h=>head+h).find(t=>tw(t,11,400) <= W-plotX-8) || head+how[how.length-1];
+  P.push(`<text x="${plotX}" y="${total-10}" font-size="11" fill="${C.muted}">${esc(foot)}</text>`);
+  return `<svg xmlns="http://www.w3.org/2000/svg"${wide?' class="wide"':""} viewBox="0 0 ${W} ${total}" width="${W}" height="${total}" font-family='${FONT}'>${P.join("")}</svg>`;
 }
 
 function renderLegend(){
@@ -1113,6 +1206,12 @@ $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.5", date:"2026-11-17", notes:[
+    "New Readable layout: every carrier the same width so names fit, and every layer fills the full width as a clean rectangle",
+    "In Readable, a carrier on several layers keeps one column all the way up; open space gets a column of its own",
+    "Readable boxes show share and line, the carrier's premium for their share, and the 100% layer premium",
+    "Hover any box for its line, premium for their share and 100% layer premium",
+    "Long names wrap onto up to three lines; a wide Readable schematic scrolls sideways and prints to fit the page"]},
   {v:"1.4", date:"2026-11-17", notes:[
     "Overlapping layers (e.g. carriers on P$25M, P$50M and P$75M) are split into stacked layers; a carrier on a bigger layer is one block running through every layer it covers",
     "Open space, placed % and premium are worked out for each of those layers",

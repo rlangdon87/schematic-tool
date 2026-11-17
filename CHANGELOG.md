@@ -2,6 +2,13 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.5 – 2026-11-17
+- New Readable layout: every carrier the same width so names fit, and every layer fills the full width as a clean rectangle
+- In Readable, a carrier on several layers keeps one column all the way up; open space gets a column of its own
+- Readable boxes show share and line, the carrier's premium for their share, and the 100% layer premium
+- Hover any box for its line, premium for their share and 100% layer premium
+- Long names wrap onto up to three lines; a wide Readable schematic scrolls sideways and prints to fit the page
+
 ## v1.4 – 2026-11-17
 - Overlapping layers (e.g. carriers on P$25M, P$50M and P$75M) are split into stacked layers; a carrier on a bigger layer is one block running through every layer it covers
 - Open space, placed % and premium are worked out for each of those layers
