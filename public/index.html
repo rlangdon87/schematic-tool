@@ -43,6 +43,14 @@ button,input,select,textarea{font-family:var(--f-sans)}
 .top .themes{display:flex;gap:4px}
 .top .themes button{background:transparent;border:1px solid rgba(255,255,255,.22);color:#e5eff0;border-radius:999px;padding:3px 10px;font:600 12px var(--f-sans);cursor:pointer}
 .top .themes button[aria-pressed=true]{background:#e5eff0;color:#262835;border-color:#e5eff0}
+.lib{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lib select{width:auto;max-width:240px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:var(--r);padding:5px 8px;font:13px var(--f-sans)}
+.lib select option{color:#262835;background:#fff}
+.lib button{background:transparent;border:1px solid rgba(255,255,255,.22);color:#e5eff0;border-radius:var(--r);padding:5px 10px;font:600 12px var(--f-sans);cursor:pointer;white-space:nowrap}
+.lib button:hover{background:rgba(255,255,255,.1)}
+.lib button.pri{background:#007586;border-color:#007586;color:#fff}
+.lib button.pri:hover{background:#29b0c3;border-color:#29b0c3}
+.lib .dirty{font-size:12px;color:#ffc24d;white-space:nowrap}
 
 main{padding:18px 20px 48px;display:grid;grid-template-columns:minmax(340px,440px) minmax(0,1fr);gap:16px;align-items:start}
 @media (max-width:1000px){main{grid-template-columns:minmax(0,1fr);padding:16px}.top{padding:10px 16px}.top .prog{min-width:0;flex:1}}
@@ -153,6 +161,13 @@ details.help code{font-size:12px;background:var(--raised);border:1px solid var(-
 <header class="top">
   <div class="brand"><span class="mark"></span>Schematic Builder</div>
   <input class="prog" id="title" placeholder="Program name, e.g. Acme Property 2027 Renewal" aria-label="Program name">
+  <div class="lib noprint">
+    <select id="progSel" aria-label="Saved programs"></select>
+    <button id="saveProg" class="pri" title="Save this program to your list">Save</button>
+    <button id="delProg" title="Remove this program from your list">Delete</button>
+    <button id="xlsxOut" title="Download every saved program as one Excel file, one sheet each">Download Excel</button>
+    <span class="dirty" id="dirty" hidden>Unsaved changes</span>
+  </div>
   <span class="sp"></span>
   <div class="themes" role="group" aria-label="Theme">
     <button data-theme-btn="light">Light</button><button data-theme-btn="auto">Auto</button><button data-theme-btn="dark">Dark</button>
@@ -239,7 +254,7 @@ details.help code{font-size:12px;background:var(--raised);border:1px solid var(-
 
     <section class="card">
       <div class="card-h">
-        <div><h2>Schedule Detail</h2><p class="sub">Premiums in <span style="color:var(--calc);font-style:italic">blue italics</span> are calculated from the layer's 100% premium.</p></div>
+        <div><h2>Schedule Detail</h2><p class="sub">Figures in <span style="color:var(--calc);font-style:italic">blue italics</span> weren't in the schedule and are calculated: line = share × limit, share = line ÷ limit, premium = share × 100% premium, 100% premium = premium ÷ share.</p></div>
         <button class="btn ghost sm noprint" id="copyTsv">Copy as Table</button>
       </div>
       <div class="tbl-wrap" id="table"><div class="empty" style="border:0">No data yet.</div></div>
@@ -260,12 +275,12 @@ const store = {
   set(k, v){ try{ localStorage.setItem("sb2."+k, JSON.stringify(v)) }catch(e){} }
 };
 
-/* ================= Access points (same set and colours as Quote Desk) ================= */
-const AP = ["Direct","Wholesale","London","Bermuda","Aon facility","Captive","Other"];
-const AP_COL_L = {Direct:"#0055a8",Wholesale:"#a70171",London:"#0184bc","Aon facility":"#01577d",Bermuda:"#e85d10",Other:"#6f027f",Captive:"#13a88a"};
-const AP_COL_D = {Direct:"#4a8fdc",Wholesale:"#d0459a",London:"#3bb0e0","Aon facility":"#1f86b3",Bermuda:"#f27a33",Other:"#a25fc0",Captive:"#3fcca9"};
-const EXTRA_L = ["#007586","#c8174f","#29b0c3","#7aa61a","#b38b00","#5d6e78"];
-const EXTRA_D = ["#29b0c3","#f0507f","#78ccd7","#a3cc4a","#d9b23a","#9fb0b7"];
+/* ================= Access points (each its own colour; no access point = grey) ================= */
+const AP = ["Direct","Wholesale","London","Bermuda","ART","Terrorism","Aon facility","Captive","Other"];
+const AP_COL_L = {Direct:"#3d3fa8",Wholesale:"#a70171",London:"#0184bc","Aon facility":"#01577d",Bermuda:"#e85d10",ART:"#b38b00",Terrorism:"#5f7f12",Other:"#6f027f",Captive:"#13a88a"};
+const AP_COL_D = {Direct:"#8f91f0",Wholesale:"#d0459a",London:"#3bb0e0","Aon facility":"#1f86b3",Bermuda:"#f27a33",ART:"#e0b53c",Terrorism:"#a3cc4a",Other:"#a25fc0",Captive:"#3fcca9"};
+const EXTRA_L = ["#007586","#c8174f","#0055a8","#8a5a00","#29b0c3"];
+const EXTRA_D = ["#29b0c3","#f0507f","#4a8fdc","#d39a3a","#78ccd7"];
 const NONE = "Not assigned";
 const NONE_L = "#8c9aa3", NONE_D = "#6c7a84";
 const MKT_L = ["#0055a8","#a70171","#0184bc","#e85d10","#6f027f","#13a88a","#007586","#c8174f","#29b0c3","#7aa61a","#b38b00","#01577d"];
@@ -275,6 +290,8 @@ function normAP(s){
   const x = String(s||"").trim(); if(!x) return "";
   const l = x.toLowerCase();
   if(/^(n\/?a|none|-|–|tbc|unknown)$/.test(l)) return "";
+  if(/\bart\b|alternative risk|parametric|\bils\b|cat bond/.test(l)) return "ART";
+  if(/terror|political violence|\bpv\b|\bsrcc\b|pool ?re\b|\btria\b/.test(l)) return "Terrorism";
   if(/aon facility|\bact\b|\bgpf\b|facility/.test(l)) return "Aon facility";
   if(/lloyd|london/.test(l)) return "London";
   if(/bermuda/.test(l)) return "Bermuda";
@@ -406,6 +423,7 @@ const S = {
   apCol: store.get("apCol",{}),          // user colour overrides per access point
   apSet: store.get("apSet",{}),          // user access point per market key
   wb: null, srcName: "", sheet: 0, hdr: 0, map: {}, rows: [],
+  lib: store.get("lib",[]), cur: store.get("cur",null), snap: null,   // saved programs
   data: {layers:[], unread:[], calc:0}
 };
 
@@ -426,8 +444,9 @@ function loadRows(rows, name, info){
   S.rows = rows.map(r => r.map(c => c==null ? "" : c));
   S.srcName = name;
   S.hdr = detectHeaderRow(S.rows);
-  const saved = store.get("map:"+sig(S.rows[S.hdr]||[]), null);
-  S.map = saved || guessMap(S.rows[S.hdr]||[]);
+  const hsig = sig(S.rows[S.hdr]||[]);
+  const saved = store.get("map:"+hsig, null);
+  S.map = hsig===EXPORT_SIG ? {...EXPORT_MAP} : (saved || guessMap(S.rows[S.hdr]||[]));
   $("#srcName").textContent = name; $("#srcInfo").textContent = info||"";
   $("#hdr").value = S.hdr+1;
   $("#sheetWrap").hidden = !S.wb || S.wb.SheetNames.length < 2;
@@ -436,6 +455,8 @@ function loadRows(rows, name, info){
 }
 const sig = h => h.map(x=>String(x).toLowerCase().trim()).join("|");
 function loadWorkbook(wb, name){
+  // a file this tool exported: every sheet is a saved program
+  if(importLibrary(wb)) return;
   S.wb = wb;
   const sel = $("#sheet");
   sel.innerHTML = wb.SheetNames.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join("");
@@ -488,7 +509,7 @@ function renderMap(){
     renderMap(); rebuild();
   });
   // preview
-  const mappedBy = {}; for(const k in S.map) mappedBy[S.map[k]] = FIELDS.find(f=>f.k===k).l;
+  const mappedBy = {}; for(const k in S.map){ const f = FIELDS.find(f=>f.k===k); if(f) mappedBy[S.map[k]] = f.l; }
   const body = S.rows.slice(S.hdr+1, S.hdr+6);
   const n = Math.min(H.length, 14);
   $("#prev").innerHTML = `<thead><tr>${H.slice(0,n).map((h,j)=>`<th class="${mappedBy[j]?"mapped":""}" title="${esc(h)}">${esc(mappedBy[j]||String(h)||colLetter(j))}</th>`).join("")}</tr></thead><tbody>${body.map(r=>`<tr>${r.slice(0,n).map(c=>`<td title="${esc(c)}">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody>`;
@@ -502,7 +523,7 @@ function parseTable(){
   const get = (r,k) => m[k]!=null ? r[m[k]] : "";
   // share column given as fractions (0.25) or percents (25)?
   const shareVals = m.share!=null ? rows.map(r=>pctNum(r[m.share])).filter(v=>v!=null && v>0) : [];
-  const fraction = shareVals.length>0 && shareVals.every(v=>v<=1) && !rows.some(r=>String(r[m.share]).includes("%"));
+  const fraction = m.__export || (shareVals.length>0 && shareVals.every(v=>v<=1) && !rows.some(r=>String(r[m.share]).includes("%")));
   let curLayer = null;
   rows.forEach((r, i) => {
     const rowNo = S.hdr + i + 2;
@@ -520,9 +541,17 @@ function parseTable(){
     if(/^(total|sub ?total|layer total)/i.test(name)) return;
     if(!curLayer){ unread.push({n:rowNo, text:name, why:"no layer found for this row"}); return; }
     let share = pctNum(get(r,"share")); if(share!=null && fraction) share *= 100;
-    const line = money(get(r,"line"));
-    const prem = money(get(r,"prem"));
-    const price = money(get(r,"price"));
+    let line = money(get(r,"line"));
+    let prem = money(get(r,"prem"));
+    let price = money(get(r,"price"));
+    // our own Excel export marks figures it calculated; drop them so they're worked out again
+    const calc = String(get(r,"calc")??"").toLowerCase();
+    if(calc){
+      if(/share/.test(calc)) share = null;
+      if(/line/.test(calc)) line = null;
+      if(/100%/.test(calc)) price = null;
+      if(/(^|,\s*)premium/.test(calc)) prem = null;
+    }
     const st = statusOf(get(r,"status")+" "+(m.status==null?get(r,"note"):""));
     raw.push({row:rowNo, market:name, ap:normAP(get(r,"ap")), limit:curLayer.limit, attach:curLayer.attach,
               share, line, prem, price, status:st, note:String(get(r,"note")??"").trim()});
@@ -575,11 +604,11 @@ function build({raw, unread, problem}){
     if(!layers.has(k)) layers.set(k, {attach:x.attach, limit:x.limit, label:"", lines:[]});
     const L = layers.get(k);
     if(x.label && !L.label) L.label = x.label;
-    let share = x.share;
-    if((share==null || isNaN(share)) && x.line) share = x.line / x.limit * 100;
+    let share = x.share, shareCalc = false;
+    if((share==null || isNaN(share)) && x.line){ share = x.line / x.limit * 100; shareCalc = true; }
     const mk = mkey(x.market);
     const ap = S.apSet[mk] || x.ap || "";
-    L.lines.push({...x, share: share||0, ap, prem: x.prem, premCalc:false});
+    L.lines.push({...x, share: share||0, ap, prem: x.prem, premCalc:false, shareCalc, lineCalc: !x.line});
   });
   const out = [...layers.values()].sort((a,b)=>a.attach-b.attach);
   let calcCount = 0;
@@ -598,6 +627,9 @@ function build({raw, unread, problem}){
         const base = l.price || L.price100;
         if(base!=null && l.share>0){ l.prem = base * l.share/100; l.premCalc = true; calcCount++; }
       }
+      // this carrier's 100% layer premium: as given, else their premium ÷ their share, else the layer's
+      if(l.price){ l.price100 = l.price; l.priceCalc = false; }
+      else { l.price100 = l.prem!=null && l.share>0 ? l.prem/(l.share/100) : L.price100; l.priceCalc = l.price100!=null; }
     });
     L.firm = live.filter(l=>l.status==="firm").reduce((s,l)=>s+l.share,0);
     L.ind = live.filter(l=>l.status==="indication").reduce((s,l)=>s+l.share,0);
@@ -657,7 +689,8 @@ function fitName(name, w, size){
 }
 
 /* ================= Render ================= */
-function render(){
+function render(){ renderMain(); updateLib(); }
+function renderMain(){
   const {layers, unread, problem, calc} = S.data;
   const title = $("#title").value.trim();
   $("#progTitle").textContent = title || "Program Schematic";
@@ -751,7 +784,7 @@ function svg(layers, top){
     live.forEach(ln => {
       const w = plotW * ln.share/scaleW;
       const g = colourOf(ln);
-      const fill = mix(g, C.surface, ln.status==="indication" ? .12 : .24);
+      const fill = mix(g, C.surface, ln.status==="indication" ? .16 : .34);
       const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}\nLine ${fmtM(L.limit*ln.share/100)} · Premium ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
       const bx = x+1, by = y0+1, bw = Math.max(0, w-2), bh = h-2;
       P.push(`<g data-tip="${esc(tip)}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="${fill}"/>`);
@@ -813,14 +846,14 @@ function tableHtml(layers){
   const aps = [...new Set([...AP, ...apList().filter(a=>a!==NONE)])];
   let h = `<table class="grid"><thead><tr><th>Layer / Market</th><th>Access Point</th><th class="r">Share</th><th class="r">Line</th><th class="r">Premium</th><th class="r">100% Premium</th><th>Status</th><th>Notes</th></tr></thead><tbody>`;
   [...layers].reverse().forEach(L=>{
-    h += `<tr class="lh"><td>${layerName(L)}${L.label?" · "+esc(L.label):""}</td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmtM(L.limit*L.placed/100)}</td><td class="r">${fmt$(L.prem)}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${L.placed<99.995?"Open":L.placed>100.005?"Overplaced":"Placed"}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td></tr>`;
+    h += `<tr class="lh"><td>${layerName(L)}${L.label?" · "+esc(L.label):""}</td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmt$(L.limit*L.placed/100)}</td><td class="r">${fmt$(L.prem)}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${L.placed<99.995?"Open":L.placed>100.005?"Overplaced":"Placed"}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td></tr>`;
     L.lines.forEach(x=>{
       const k = mkey(x.market), dec = x.status==="declined";
       const sw = dec ? `<span class="sw" style="border:1px solid var(--line)"></span>` : `<span class="sw" style="background:${colourOf(x)}"></span>`;
       h += `<tr><td><span style="display:inline-flex;align-items:center;gap:8px">${sw}${esc(x.market)}</span></td>
         <td><select class="apsel noprint${x.ap?"":" none"}" data-mk="${esc(k)}"><option value="">${NONE}</option>${aps.map(a=>`<option${a===x.ap?" selected":""}>${esc(a)}</option>`).join("")}<option value="__new">+ Add access point…</option></select></td>
-        <td class="r">${dec?"–":fmtPct(x.share,4)}</td><td class="r">${dec?"–":fmtM(L.limit*x.share/100)}</td>
-        <td class="r${x.premCalc?" calc":""}">${dec?"–":fmt$(x.prem)}</td><td class="r">${x.prem!=null&&x.share?fmt$(x.prem/(x.share/100)):"–"}</td>
+        <td class="r${!dec&&x.shareCalc?" calc":""}">${dec?"–":fmtPct(x.share,4)}</td><td class="r${!dec&&x.lineCalc&&x.share?" calc":""}">${dec?"–":fmt$(L.limit*x.share/100)}</td>
+        <td class="r${x.premCalc?" calc":""}">${dec?"–":fmt$(x.prem)}</td><td class="r${!dec&&x.priceCalc?" calc":""}">${dec?"–":fmt$(x.price100)}</td>
         <td>${x.status==="firm"?"Firm":x.status==="indication"?"Indication":"Declined"}</td><td>${esc(x.note||"")}</td></tr>`;
     });
   });
@@ -855,6 +888,131 @@ $("#copyTsv").onclick = async ()=>{
   S.data.layers.forEach(L=>L.lines.forEach(x=>rows.push([layerName(L),x.market,x.ap||"",x.share,Math.round(L.limit*x.share/100),x.prem==null?"":Math.round(x.prem),x.premCalc?"Yes":"",x.prem!=null&&x.share?Math.round(x.prem/(x.share/100)):"",x.status,x.note||""])));
   try{ await navigator.clipboard.writeText(rows.map(r=>r.join("\t")).join("\n")); toast("Copied – paste into Excel") }catch(e){ toast("Copy didn't work") }
 };
+
+/* ================= Saved programs (kept in this browser) + Excel file ================= */
+const EXPORT_HDR = ["Program","Layer","Limit","Attachment","Market","Access Point","Share %","Line $","Premium","100% Layer Premium","Status","Notes","Calculated"];
+const EXPORT_SIG = sig(EXPORT_HDR);
+const EXPORT_MAP = {limit:2, attach:3, market:4, ap:5, share:6, line:7, prem:8, price:9, status:10, note:11, calc:12, __export:true};
+const EXPORT_FMT = [[2,"$#,##0"],[3,"$#,##0"],[6,"0.00%"],[7,"$#,##0"],[8,"$#,##0"],[9,"$#,##0"]];
+
+// one row per carrier line, with every figure filled in; "Calculated" lists the ones we worked out
+function exportRows(name){
+  const rows = [EXPORT_HDR.slice()];
+  [...S.data.layers].reverse().forEach(L => L.lines.forEach(x => {
+    const dec = x.status==="declined", calc = [];
+    if(!dec){
+      if(x.shareCalc) calc.push("Share %");
+      if(x.lineCalc && x.share) calc.push("Line $");
+      if(x.premCalc) calc.push("Premium");
+      if(x.priceCalc) calc.push("100% Premium");
+    }
+    rows.push([name, layerName(L), L.limit, L.attach, x.market, x.ap||"",
+      dec||!x.share ? "" : x.share/100,
+      dec||!x.share ? "" : Math.round(L.limit*x.share/100),
+      dec||x.prem==null ? "" : Math.round(x.prem),
+      dec||x.price100==null ? "" : Math.round(x.price100),
+      x.status==="firm" ? "Firm" : x.status==="indication" ? "Indication" : "Declined",
+      x.note||"", calc.join(", ")]);
+  }));
+  return rows;
+}
+function persistLib(){
+  try{ localStorage.setItem("sb2.lib", JSON.stringify(S.lib)); }
+  catch(e){ toast("Browser storage is full – download the Excel file to keep your programs"); }
+}
+function upsert(p){
+  const i = S.lib.findIndex(x=>x.name===p.name);
+  if(i>=0) S.lib[i] = p; else S.lib.push(p);
+  S.lib.sort((a,b)=>a.name.localeCompare(b.name));
+}
+function updateLib(){
+  const cur = S.lib.find(p=>p.name===S.cur);
+  $("#progSel").innerHTML =
+    (cur ? "" : `<option value="" selected>${S.lib.length ? `Saved programs (${S.lib.length})` : "No saved programs"}</option>`)
+    + S.lib.map(p=>`<option value="${esc(p.name)}"${p===cur?" selected":""}>${esc(p.name)}</option>`).join("")
+    + `<option value="__new">+ New program</option>`;
+  $("#delProg").hidden = !cur;
+  const has = S.data.layers.length>0;
+  const same = cur && $("#title").value.trim()===cur.name && JSON.stringify(exportRows(cur.name))===S.snap;
+  $("#dirty").hidden = !has || same;
+  $("#dirty").textContent = cur ? "Unsaved changes" : "Not saved";
+}
+function saveProgram(){
+  if(!S.data.layers.length){ toast("Nothing to save yet"); return false; }
+  let name = $("#title").value.trim();
+  if(!name){
+    name = (prompt("Name this program:")||"").trim(); if(!name) return false;
+    $("#title").value = name; store.set("title", name);
+  }
+  const rows = exportRows(name);
+  upsert({name, rows, saved:Date.now()}); persistLib();
+  S.cur = name; store.set("cur", name); S.snap = JSON.stringify(rows);
+  render(); toast(`Saved “${name}”`);
+  return true;
+}
+function loadProgram(name){
+  const p = S.lib.find(x=>x.name===name); if(!p) return;
+  S.cur = name; store.set("cur", name);
+  $("#title").value = name; store.set("title", name);
+  S.wb = null; S.tab = "table"; store.set("tab", "table");
+  p.rows.slice(1).forEach(r => { delete S.apSet[mkey(r[4])]; }); store.set("apSet", S.apSet);
+  loadRows(p.rows.map(r=>r.slice()), name, "Saved program");
+  S.snap = JSON.stringify(exportRows(name));
+  render();
+}
+function newProgram(){
+  S.cur = null; store.set("cur", null);
+  $("#title").value = ""; store.set("title", "");
+  $("#src").value = ""; store.set("src", "");
+  $("#newSrc").click();
+}
+function deleteProgram(){
+  if(!S.cur || !confirm(`Remove “${S.cur}” from your saved programs?\n\nIt stays in any Excel file you've already downloaded.`)) return;
+  S.lib = S.lib.filter(p=>p.name!==S.cur); persistLib();
+  toast(`Removed “${S.cur}”`);
+  S.cur = null; store.set("cur", null); render();
+}
+function downloadXlsx(){
+  if(!window.XLSX){ toast("Excel library still loading – try again in a moment"); return; }
+  // whatever is on screen goes in the file too
+  if(S.data.layers.length && !$("#dirty").hidden && !saveProgram()) return;
+  if(!S.lib.length){ toast("Save a program first"); return; }
+  const wb = XLSX.utils.book_new(), used = new Set();
+  S.lib.forEach(p => {
+    const base = p.name.replace(/[\[\]:*?\/\\]/g," ").replace(/^'+|'+$/g,"").trim().slice(0,31) || "Program";
+    let n = base, k = 2;
+    while(used.has(n.toLowerCase())){ const suf = ` (${k++})`; n = base.slice(0,31-suf.length)+suf; }
+    used.add(n.toLowerCase());
+    const ws = XLSX.utils.aoa_to_sheet(p.rows);
+    for(let r=1; r<p.rows.length; r++) EXPORT_FMT.forEach(([c,z]) => {
+      const cell = ws[XLSX.utils.encode_cell({r,c})]; if(cell && typeof cell.v==="number") cell.z = z;
+    });
+    ws["!cols"] = [24,16,14,14,26,14,9,14,14,18,11,30,30].map(w=>({wch:w}));
+    XLSX.utils.book_append_sheet(wb, ws, n);
+  });
+  XLSX.writeFile(wb, "Schematics.xlsx");
+  toast(`Downloaded ${S.lib.length} program${S.lib.length>1?"s":""}`);
+}
+// a workbook this tool exported: load every sheet as a saved program
+function importLibrary(wb){
+  const found = [];
+  wb.SheetNames.forEach(sn => {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, raw:true, defval:""});
+    if(!rows.length || sig(rows[0])!==EXPORT_SIG) return;
+    const body = rows.slice(1).filter(r=>r.some(c=>String(c).trim()!==""));
+    const name = String(body[0]?.[0] ?? "").trim() || sn;
+    found.push({name, rows:[rows[0], ...body], saved:Date.now()});
+  });
+  if(!found.length) return false;
+  found.forEach(upsert); persistLib();
+  loadProgram(found[0].name);
+  toast(`Loaded ${found.length} program${found.length>1?"s":""} – switch between them at the top`);
+  return true;
+}
+$("#progSel").onchange = e => { const v = e.target.value; if(v==="__new") newProgram(); else if(v) loadProgram(v); else render(); };
+$("#saveProg").onclick = () => saveProgram();
+$("#delProg").onclick = () => deleteProgram();
+$("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Samples ================= */
 const SAMPLE_TBL = [
@@ -910,6 +1068,7 @@ $("#src").value = store.get("src","");
 $("#title").value = store.get("title","");
 applyTheme(store.get("theme","auto"));
 rebuild();
+if(S.cur && S.lib.some(p=>p.name===S.cur)) loadProgram(S.cur);
 })();
 </script>
 </body>
