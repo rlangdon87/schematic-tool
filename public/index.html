@@ -1397,19 +1397,23 @@ function pngBlob(){
 }
 $("#copyPng").onclick = async ()=>{ try{ const b=await pngBlob(); await navigator.clipboard.write([new ClipboardItem({"image/png":b})]); toast("Schematic copied as an image") }catch(e){ toast("Copy didn't work – use Download PNG") } };
 /* ================= Excel and PDF exports of the schematic ================= */
+// loaded only when someone exports; jsDelivr mirrors the npm packages exactly, cdnjs is the fallback
 const LIBS = {
-  exceljs: "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
-  jspdf: "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
-  autotable: "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"
+  exceljs: ["https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js", "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"],
+  jspdf: ["https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js", "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"],
+  autotable: ["https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js", "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"]
 };
 const libLoads = {};
-function loadLib(url, ready){
-  if(ready()) return Promise.resolve();
+function loadScript(url){
   return libLoads[url] || (libLoads[url] = new Promise((res, rej) => {
     const sc = document.createElement("script"); sc.src = url;
-    sc.onload = () => res(); sc.onerror = () => { delete libLoads[url]; rej(new Error("load")); };
+    sc.onload = () => res(); sc.onerror = () => { delete libLoads[url]; sc.remove(); rej(new Error("load")); };
     document.head.appendChild(sc);
   }));
+}
+async function loadLib(urls, ready){
+  for(const u of urls){ if(ready()) return; try{ await loadScript(u); if(ready()) return; }catch(e){} }
+  if(!ready()) throw new Error("load");
 }
 const fileBase = () => ($("#title").value.trim() || "schematic").replace(/[^\w\- ]+/g, "");
 function saveBlob(blob, name){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000); }
@@ -1713,6 +1717,8 @@ $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.11.1", date:"2026-11-17", notes:[
+    "Excel and PDF exports load their libraries from a second source if the first is unreachable"]},
   {v:"1.11", date:"2026-11-17", notes:[
     "Download the schematic as Excel: drawn in cells in the layout on screen (Uniform, To Scale or Readable), with coloured boxes, open space, per-layer figures and the legend, plus a Schedule sheet",
     "Download as PDF: the schematic on page 1 (landscape Letter), then the schedule grouped by layer, with page numbers",

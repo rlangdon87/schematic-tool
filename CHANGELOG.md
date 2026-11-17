@@ -2,6 +2,9 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.11.1 – 2026-11-17
+- Excel and PDF exports load their libraries from a second source if the first is unreachable
+
 ## v1.11 – 2026-11-17
 - Download the schematic as Excel: drawn in cells in the layout on screen (Uniform, To Scale or Readable), with coloured boxes, open space, per-layer figures and the legend, plus a Schedule sheet
 - Download as PDF: the schematic on page 1 (landscape Letter), then the schedule grouped by layer, with page numbers
