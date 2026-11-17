@@ -2,6 +2,17 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.8 – 2026-11-17
+- Copy Image and Download PNG include the program name, limit, premium, TIV, rate and date at the top and the legend at the bottom, and are always in the light theme
+- TIV box under the program name: shows the rate per $100 of TIV for the program and each layer; read automatically from a "TIV: …" title row or a "TIV $5.87B" text line, and saved with the program and in the Excel file
+- Warnings fold into one line of chips, with Details to see each one
+- Open space is a soft grey hatch instead of red
+- Combine Repeat Carriers: one box per carrier per layer (shows when a carrier has more than one line on a layer)
+- Asks before switching programs or leaving the page with unsaved changes
+- Removing a line can be undone
+- Download Excel shows a dot when programs have been saved since the last download
+- Headline figures are a compact strip; the right-hand column is labelled; lighter grey for markets with no access point
+
 ## v1.7 – 2026-11-17
 - Readable layout has no empty gaps: every layer fills the full width, so it's always a clean rectangle
 - Edit the schedule in place: click any cell (carrier, share, line, premium, 100% premium, status, notes), add a carrier to a layer, add a layer, or remove a line

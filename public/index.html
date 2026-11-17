@@ -50,6 +50,7 @@ button,input,select,textarea{font-family:var(--f-sans)}
 .lib button:hover{background:rgba(255,255,255,.1)}
 .lib button.pri{background:#007586;border-color:#007586;color:#fff}
 .lib button.pri:hover{background:#29b0c3;border-color:#29b0c3}
+.lib button.stale{border-color:#ffc24d;color:#ffc24d}
 .lib .dirty{font-size:12px;color:#ffc24d;white-space:nowrap}
 
 main{padding:18px 20px 48px;display:grid;grid-template-columns:minmax(340px,440px) minmax(0,1fr);gap:16px;align-items:start}
@@ -115,10 +116,21 @@ textarea.tall{min-height:300px}
 .chip.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .chip.info{background:var(--info-bg);color:var(--info);border-color:transparent}
 
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
-.kpi{border:1px solid var(--line);border-radius:var(--r);padding:8px 12px;background:var(--raised);display:flex;flex-direction:column;gap:2px;min-width:0}
-.kpi .l{font-size:12px;color:var(--muted);font-weight:600}
-.kpi .v{font-size:18px;font-weight:700;color:var(--navy)}
+.kpis{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:var(--r);background:var(--raised);margin-bottom:12px}
+.kpi{padding:6px 16px;border-right:1px solid var(--line-2);display:flex;flex-direction:column;gap:1px;min-width:0}
+.kpi:last-child{border-right:0}
+.kpi .l{font-size:11.5px;color:var(--muted);font-weight:600}
+.kpi .v{font-size:15px;font-weight:700;color:var(--navy)}
+.kpis:empty{display:none}
+.issum{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
+.linkish{border:0;background:none;color:var(--accent);font:600 12.5px var(--f-sans);cursor:pointer;padding:2px 4px}
+.linkish:hover{text-decoration:underline}
+.issue-list{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding:8px 10px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--raised)}
+.tivw{display:flex;align-items:center;gap:6px;margin-top:6px}
+.tivw label{font:600 12px var(--f-sans);color:var(--muted)}
+.tivw input{width:150px;padding:3px 8px}
+.toast button{margin-left:10px;background:none;border:1px solid currentColor;color:inherit;border-radius:2px;padding:1px 8px;cursor:pointer;font:600 12px var(--f-sans)}
+.toast.act{pointer-events:auto}
 .issues{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
 .issues:empty{display:none}
 .issue{font-size:13px;display:flex;gap:8px;align-items:baseline}
@@ -271,7 +283,8 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
   <div class="col">
     <section class="card">
       <div class="card-h">
-        <div><h2 id="progTitle">Program Schematic</h2><p class="sub" id="progSub">Nothing loaded yet</p></div>
+        <div><h2 id="progTitle">Program Schematic</h2><p class="sub" id="progSub">Nothing loaded yet</p>
+          <div class="tivw noprint"><label for="tiv">TIV</label><input id="tiv" class="in" placeholder="e.g. $5.87B" title="Total insured value – shows the rate per $100 of TIV"></div></div>
         <div class="row noprint">
           <button class="btn ghost sm" id="copyPng">Copy Image</button>
           <button class="btn ghost sm" id="dlPng">Download PNG</button>
@@ -284,6 +297,7 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
         <div class="seg-ctl"><span class="l">Colour by</span><button data-colby="ap">Access Point</button><button data-colby="mkt">Each Market</button></div>
         <div class="seg-ctl"><span class="l">Layout</span><button data-scale="uniform" title="Every layer the same height; box width = share">Uniform</button><button data-scale="prop" title="Layer height in proportion to its limit; box width = share">To Scale</button><button data-scale="read" title="Every carrier the same width so names and premiums fit">Readable</button></div>
         <div class="seg-ctl"><span class="l">Show</span><button data-lbl="share">Share</button><button data-lbl="prem">Premium</button><button data-lbl="line">Line $</button></div>
+        <div class="seg-ctl" id="combineWrap"><button data-combine title="Show a carrier with several lines on the same layer as one box">Combine Repeat Carriers</button></div>
       </div>
       <div id="schem"><div class="empty">Upload or paste a schedule to build the schematic.</div></div>
       <ul class="sch-legend" id="legend"></ul>
@@ -324,7 +338,7 @@ const AP_COL_D = {Direct:"#8f91f0",Wholesale:"#d0459a",London:"#3bb0e0","Aon fac
 const EXTRA_L = ["#007586","#c8174f","#0055a8","#8a5a00","#29b0c3"];
 const EXTRA_D = ["#29b0c3","#f0507f","#4a8fdc","#d39a3a","#78ccd7"];
 const NONE = "Not assigned";
-const NONE_L = "#8c9aa3", NONE_D = "#6c7a84";
+const NONE_L = "#a3aeb5", NONE_D = "#5f6b74";
 const MKT_L = ["#0055a8","#a70171","#0184bc","#e85d10","#6f027f","#13a88a","#007586","#c8174f","#29b0c3","#7aa61a","#b38b00","#01577d"];
 const MKT_D = ["#4a8fdc","#d0459a","#3bb0e0","#f27a33","#a25fc0","#3fcca9","#29b0c3","#f0507f","#78ccd7","#a3cc4a","#d9b23a","#1f86b3"];
 
@@ -390,6 +404,7 @@ function fmtM(n){
   if(a>=1e3) return "$"+trim2(n/1e3)+"k";
   return "$"+Math.round(n);
 }
+const fmtRate = n => n==null||!isFinite(n) ? "–" : "$"+n.toFixed(3);   // premium per $100 of TIV
 const fmt$ = n => n==null||isNaN(n) ? "–" : "$"+Math.round(n).toLocaleString("en-US");
 function fmtPct(n,d=2){ if(n==null||isNaN(n)) return "–"; const p=Math.pow(10,d); return (Math.round(n*p)/p).toString()+"%" }
 const layerName = L => L.attach===0 ? "P"+fmtM(L.limit) : fmtM(L.limit)+" xs "+fmtM(L.attach);
@@ -490,6 +505,9 @@ const S = {
   apSet: store.get("apSet",{}),          // user access point per market key
   wb: null, srcName: "", sheet: 0, hdr: 0, map: {}, rows: [],
   lib: store.get("lib",[]), cur: store.get("cur",null), snap: null,   // saved programs
+  tiv: store.get("tiv", null),            // total insured value of the program on screen
+  combine: store.get("combine", false),   // one box per carrier per layer
+  showIssues: false,
   view: store.get("view","import"),   // "schem": schematic only; "import": inputs beside it
   data: {layers:[], unread:[], calc:0}
 };
@@ -507,13 +525,17 @@ function splitCSV(line){
     else if(c==='"') q=true; else if(c===','){ out.push(cur); cur="" } else cur+=c; }
   out.push(cur); return out;
 }
+function setTiv(v){ S.tiv = v>0 ? v : null; store.set("tiv", S.tiv); }
 function loadRows(rows, name, info){
   S.rows = rows.map(r => r.map(c => c==null ? "" : c));
   S.srcName = name;
   S.hdr = detectHeaderRow(S.rows);
   const hsig = sig(S.rows[S.hdr]||[]);
   const saved = store.get("map:"+hsig, null);
-  S.map = hsig===EXPORT_SIG ? {...EXPORT_MAP} : refineMap(saved ? {...saved} : guessMap(S.rows[S.hdr]||[]), S.rows.slice(S.hdr+1), S.rows[S.hdr]);
+  // TIV: from our own file, else from a title row like "Program Limit: $75,000,000 | TIV: $5,870,142,448"
+  if(isExportSig(hsig)) setTiv(money(S.rows[S.hdr+1]?.[13]));
+  else { const t = S.rows.slice(0, S.hdr).flat().map(c=>String(c??"")).join(" ").match(/\bTIV\b[^\d$]*(\$?\s*[\d,]*\.?\d+\s*(?:bn|b|mm|m|k)?)/i); setTiv(t ? money(t[1]) : null); }
+  S.map = isExportSig(hsig) ? {...EXPORT_MAP} : refineMap(saved ? {...saved} : guessMap(S.rows[S.hdr]||[]), S.rows.slice(S.hdr+1), S.rows[S.hdr]);
   $("#srcName").textContent = name; $("#srcInfo").textContent = info||"";
   $("#hdr").value = S.hdr+1;
   $("#sheetWrap").hidden = !S.wb || S.wb.SheetNames.length < 2;
@@ -662,10 +684,12 @@ function parseQuote(seg){
   return q;
 }
 function parseText(text){
-  const raw = [], unread = []; let cur = null, curLabel = "";
+  const raw = [], unread = []; let cur = null, curLabel = "", tiv = null;
   text.replace(/\r/g,"").split("\n").forEach((rawLine, i) => {
     const line = rawLine.trim();
     if(!line || /^[-=_*#\s]+$/.test(line)) return;
+    const tm = line.match(/^\s*TIV\b[^\d$]*(\$?\s*[\d,]*\.?\d+\s*(?:bn|b|mm|m|k)?)/i);
+    if(tm){ tiv = money(tm[1]); return; }
     // several quotes on one line: split at commas (not inside $1,200,000), semicolons, "and", "+"
     const segs = line.split(/,(?!\d{3}(?!\d))|;|\s+and\s+|\s\+\s/).map(x=>x.trim()).filter(Boolean);
     const quoteLike = x => /\d\s*%|\bline\b|\bdeclin/i.test(x);
@@ -682,7 +706,7 @@ function parseText(text){
                 share:q.share, line:q.line, prem:q.prem, price:q.price, status:q.status, note:q.notes.join("; ")});
     });
   });
-  return {raw, unread};
+  return {raw, unread, tiv};
 }
 
 /* ================= Premium maths =================
@@ -737,7 +761,7 @@ const median = a => { const s=[...a].sort((x,y)=>x-y); const m=Math.floor(s.leng
 function mkey(n){ return String(n).toLowerCase().replace(/\b(insurance|ins|syndicate|syn|ltd|limited|plc|inc|co|company|group|re|reinsurance|uk|us|au|australia|se|ag|sa)\b/g,"").replace(/[^a-z0-9]/g,"") || String(n).toLowerCase(); }
 
 function rebuild(){
-  if(S.tab==="text") S.data = build(parseText($("#src").value));
+  if(S.tab==="text"){ const t = parseText($("#src").value); if(t.tiv) setTiv(t.tiv); S.data = build(t); }
   else S.data = S.rows.length ? build(parseTable()) : {layers:[], unread:[], calc:0};
   render();
 }
@@ -793,7 +817,10 @@ function renderMain(){
   $$("[data-colby]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.colby===S.colby));
   $$("[data-scale]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.scale===S.scale));
   $$("[data-lbl]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.lbl===S.lbl));
-  $("[data-lbl]").parentElement.hidden = S.scale==="read";   // Readable shows share, premium and 100% premium together
+  $("[data-lbl]").parentElement.hidden = S.scale==="read";
+  $$("[data-combine]").forEach(b=>b.setAttribute("aria-pressed", S.combine));
+  $("#combineWrap").hidden = !hasRepeats(S.data.layers||[]);
+  if(document.activeElement !== $("#tiv")) $("#tiv").value = S.tiv ? fmt$(S.tiv) : "";   // Readable shows share, premium and 100% premium together
   $$("[data-tab]").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===S.tab));
   $$("[data-pane]").forEach(p=>p.hidden = p.dataset.pane!==S.tab);
 
@@ -816,10 +843,12 @@ function renderMain(){
     ["Program Limit", fmtM(top)],
     ["Premium (placed)", fmt$(prem)],
     ["100% Premium", price100 ? fmt$(price100) : "–"],
+    ...(S.tiv ? [["Rate per $100 TIV", fmtRate((price100 || prem)/S.tiv*100)]] : []),
     ["Markets", mk.size],
     ["Fully Placed", open.length ? `No · ${open.length} open` : "Yes"]
   ].map(([l,v])=>`<div class="kpi"><span class="l">${l}</span><span class="v">${v}</span></div>`).join("");
   $("#issues").innerHTML = issuesHtml(layers, unread, calc);
+  const it = $("#issToggle"); if(it) it.onclick = () => { S.showIssues = !S.showIssues; render(); };
   $("#schem").innerHTML = svg(layers, top);
   bindTips();
   renderLegend();
@@ -837,24 +866,51 @@ function unreadHtml(unread){
     + (unread.length>8 ? `<div class="issue muted">…and ${unread.length-8} more rows skipped</div>` : "");
 }
 function issuesHtml(layers, unread, calc){
-  const out = [], {bands, overlap} = S.bands;
+  const {bands, overlap} = S.bands, items = [], sum = {};
+  const add = (g, cls, chip, text) => { items.push(`<div class="issue"><span class="chip ${cls}">${chip}</span>${text}</div>`); (sum[g] = sum[g] || {cls, n:0}).n++; };
   bands.forEach(B=>{
-    if(B.gap){ out.push(`<div class="issue"><span class="chip bad">Gap in tower</span>between ${fmtM(B.attach)} and ${fmtM(B.attach+B.limit)}</div>`); return; }
+    if(B.gap){ add("gap","bad","Gap in tower",`between ${fmtM(B.attach)} and ${fmtM(B.attach+B.limit)}`); return; }
     const gap = 100 - B.placed;
-    if(gap > 0.005) out.push(`<div class="issue"><span class="chip bad">${fmtPct(gap)} open</span>${bandName(B)} – ${fmtM(B.limit*gap/100)} of limit unplaced</div>`);
-    if(gap < -0.005) out.push(`<div class="issue"><span class="chip bad">Overplaced ${fmtPct(B.placed)}</span>${bandName(B)}</div>`);
+    if(gap > 0.005) add("open","bad",`${fmtPct(gap)} open`,`${bandName(B)} – ${fmtM(B.limit*gap/100)} of limit unplaced`);
+    if(gap < -0.005) add("over","bad",`Overplaced ${fmtPct(B.placed)}`,bandName(B));
   });
   const noPremAtAll = layers.every(L=>L.lines.every(l=>l.status==="declined" || l.prem==null));
-  if(noPremAtAll) out.push(`<div class="issue"><span class="chip warn">No premiums</span>This schedule has no premiums, so premium and ROL are left out</div>`);
+  if(noPremAtAll) add("noprem","warn","No premiums","This schedule has no premiums, so premium and ROL are left out");
   layers.forEach(L=>{
-    if(L.ind > 0) out.push(`<div class="issue"><span class="chip warn">${fmtPct(L.ind)} indication</span>${layerName(L)} – not firm</div>`);
-    if(L.missingPrem && !noPremAtAll) out.push(`<div class="issue"><span class="chip warn">No premium</span>${layerName(L)} – ${L.missingPrem} line${L.missingPrem>1?"s have":" has"} no premium and nothing to calculate it from</div>`);
+    if(L.ind > 0) add("ind","warn",`${fmtPct(L.ind)} indication`,`${layerName(L)} – not firm`);
+    if(L.missingPrem && !noPremAtAll) add("noprem","warn","No premium",`${layerName(L)} – ${L.missingPrem} line${L.missingPrem>1?"s have":" has"} no premium and nothing to calculate it from`);
   });
-  if(overlap) out.push(`<div class="issue"><span class="chip info">Layers overlap</span>Quotes on ${layers.map(layerName).join(", ")} are shown as ${bands.length} stacked layers; a line on a bigger layer runs through each one it covers</div>`);
-  if(calc) out.push(`<div class="issue"><span class="chip info">${calc} calculated</span>Premium worked out from share × the layer's 100% premium</div>`);
-  if(!out.some(x=>x.includes("chip bad")) && layers.length) out.unshift(`<div class="issue"><span class="chip ok">Fully placed</span>Every layer is at 100%</div>`);
-  return out.join("") + unreadHtml(unread);
+  if(overlap) add("overlap","info","Layers overlap",`Quotes on ${layers.map(layerName).join(", ")} are shown as ${bands.length} stacked layers; a line on a bigger layer runs through each one it covers`);
+  if(calc) add("calc","info",`${calc} calculated`,"Premium worked out from share × the layer's 100% premium");
+  if(unread.length) sum.unread = {cls:"warn", n:unread.length};
+  const label = {
+    gap: n => n>1 ? `${n} gaps in tower` : "Gap in tower", open: n => `${n} layer${n>1?"s":""} open`, over: n => `${n} overplaced`,
+    ind: n => `${n} layer${n>1?"s":""} with indications`, noprem: () => noPremAtAll ? "No premiums" : "Missing premiums",
+    unread: n => `${n} line${n>1?"s":""} not read`, overlap: () => "Layers overlap", calc: () => `${calc} premiums calculated`
+  };
+  const ok = !(sum.open || sum.over || sum.gap);
+  const chips = (ok ? `<span class="chip ok">Fully placed</span>` : "") + Object.keys(label).filter(g=>sum[g]).map(g=>`<span class="chip ${sum[g].cls}">${label[g](sum[g].n)}</span>`).join("");
+  const details = items.join("") + unreadHtml(unread);
+  if(!details) return `<div class="issum">${chips}<span class="muted">Every layer is at 100%</span></div>`;
+  return `<div class="issum">${chips}<button class="linkish noprint" id="issToggle" aria-expanded="${S.showIssues}">${S.showIssues ? "Hide details" : "Details"}</button></div>`
+    + `<div class="issue-list"${S.showIssues ? "" : " hidden"}>${details}</div>`;
 }
+
+// one box per carrier per layer (same status and access point), when "Combine Repeat Carriers" is on
+function combineLines(lines){
+  const out = [], by = new Map();
+  lines.forEach(l => {
+    const k = mkey(l.market)+"|"+l.status+"|"+(l.ap||"");
+    if(!by.has(k)){ const c = {...l, n:1}; by.set(k, c); out.push(c); return; }
+    const c = by.get(k);
+    c.prem = c.prem==null && l.prem==null ? null : (c.prem||0) + (l.prem||0);
+    c.share += l.share; c.n++; c.premCalc = c.premCalc || l.premCalc;
+    c.price100 = c.prem!=null && c.share>0 ? c.prem/(c.share/100) : c.price100;
+    c.note = [c.note, l.note].filter(Boolean).join("; ");
+  });
+  return out;
+}
+const hasRepeats = layers => layers.some(L => combineLines(L.lines).length < L.lines.length);
 
 function makeBands(layers){
   const pts = [...new Set(layers.flatMap(L=>[L.attach, L.attach+L.limit]))].sort((a,b)=>a-b);
@@ -866,7 +922,7 @@ function makeBands(layers){
                 gap: !layers.some(L=>L.attach<=a && L.attach+L.limit>=b)});
   }
   const items = [];
-  layers.forEach(L => L.lines.forEach(ln => {
+  layers.forEach(L => (S.combine ? combineLines(L.lines) : L.lines).forEach(ln => {
     if(ln.status==="declined" || !(ln.share>0)) return;
     const i0 = bands.findIndex(B=>B.attach===L.attach), i1 = bands.findIndex(B=>B.attach+B.limit===L.attach+L.limit);
     items.push({ln, L, i0, i1});
@@ -1007,7 +1063,7 @@ function svg(layers, top){
   bands.forEach((B,i) => { yBot[i] = y; y -= heights[i]; yTop[i] = y; });
   const {blocks, opens} = layoutBoxes(bands, items, width, plotX, plotW);
   const P = [];
-  P.push(`<defs><pattern id="gap" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="${C.badbg}"/><line x1="0" y1="0" x2="0" y2="7" stroke="${C.bad}" stroke-width="1.6" opacity=".35"/></pattern></defs>`);
+  P.push(`<defs><pattern id="gap" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="${toHex(cssv("--raised"))}"/><line x1="0" y1="0" x2="0" y2="7" stroke="${C.muted}" stroke-width="1.4" opacity=".4"/></pattern></defs>`);
   P.push(`<rect width="${W}" height="${total}" fill="${C.surface}"/>`);
   const label = (cx, cy, rows) => { let yy = cy - (rows.length-1)*7 + 4; rows.forEach(([t,s,wt,c]) => { P.push(`<text x="${cx}" y="${yy}" text-anchor="middle" font-size="${s}" font-weight="${wt}" fill="${c}">${esc(t)}</text>`); yy+=14; }); };
 
@@ -1023,9 +1079,11 @@ function svg(layers, top){
     const sl = B.gap ? [["Gap", 12, 700, C.bad], ["no layer quoted", 11, 400, C.bad]]
       : [[B.premShare>0 ? fmt$(B.prem) : "–", 12, 700, C.navy], [fmtPct(B.placed)+" placed", 11, 400, (B.placed<99.995||B.placed>100.005)?C.bad:C.muted]];
     if(!B.gap && B.rol && h>=56) sl.push([`ROL ${fmtPct(B.rol)}`, 11, 400, C.muted]);
+    if(!B.gap && S.tiv && B.price100 && h>=70) sl.push([`Rate ${fmtRate(B.price100/S.tiv*100)}`, 11, 400, C.muted]);
     let sy = y0 + h/2 - (sl.length-1)*7 + 4;
     sl.forEach(([t,s,w,c]) => { P.push(`<text x="${sx}" y="${sy}" font-size="${s}" font-weight="${w}" fill="${c}">${esc(t)}</text>`); sy+=14; });
   });
+  if(heights[heights.length-1] >= 80) P.push(`<text x="${plotX + plotW + 14}" y="${padT+10}" font-size="10" fill="${C.muted}">LAYER PREMIUM · PLACED</text>`);
 
   // open space
   opens.forEach(o => {
@@ -1053,7 +1111,7 @@ function svg(layers, top){
     const {it} = bk, {ln, L} = it, y0 = yTop[it.i1], h = yBot[it.i0] - y0, spans = it.i1 - it.i0 + 1;
     const g = colourOf(ln), fill = mix(g, C.surface, ln.status==="indication" ? .16 : .34);
     const lineAmt = L.limit*ln.share/100;
-    const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}${spans>1?` · runs through ${spans} layers`:""}\nLine ${fmt$(lineAmt)}\nPremium for their share ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}\n100% layer premium ${fmt$(ln.price100)}${ln.priceCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
+    const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}${spans>1?` · runs through ${spans} layers`:""}${ln.n>1?` · ${ln.n} lines combined`:""}\nLine ${fmt$(lineAmt)}\nPremium for their share ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}\n100% layer premium ${fmt$(ln.price100)}${ln.priceCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
     const bx = bk.x+1, by = y0+1, bw = Math.max(0, bk.w-2), bh = h-2;
     P.push(`<g data-tip="${esc(tip)}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="${fill}"/>`);
     if(ln.status==="indication") P.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="none" stroke="${g}" stroke-dasharray="3 2"/>`);
@@ -1095,7 +1153,7 @@ function svg(layers, top){
   P.push(`<line x1="${plotX}" x2="${plotX}" y1="${padT}" y2="${padT+H}" stroke="${C.line}"/>`);
   P.push(`<text x="${axisW-10}" y="${padT+10}" text-anchor="end" font-size="11" fill="${C.muted}">${fmtM(top)}</text>`);
   const ttl = $("#title").value.trim();
-  const how = read ? ["Readable: equal widths, not to share · figures: share · line, their premium, 100% layer premium", "Readable: equal widths, not to share", "Readable"]
+  const how = read ? ["Readable · equal widths, not to share · share · line, their premium, 100% layer premium", "Readable · equal widths, not to share", "Readable"]
     : [S.scale==="uniform" ? "Layers at equal height" : "Layer height to scale"];
   const head = `${ttl?ttl+" · ":""}Premium ${fmt$(layers.reduce((s,L)=>s+L.prem,0))} · `;
   const foot = how.map(h=>head+h).find(t=>tw(t,11,400) <= W-plotX-8) || head+how[how.length-1];
@@ -1195,7 +1253,10 @@ function bindTable(){
     el.onchange = () => { editCell(el.closest("tr"), el.dataset.f, el.value); setTimeout(refocus, 0); };
     if(el.tagName==="INPUT") el.onkeydown = e => { if(e.key==="Enter"){ e.preventDefault(); el.blur(); } if(e.key==="Escape"){ el.value = el.defaultValue; el.blur(); } };
   });
-  $$("#table .delrow").forEach(b => b.onclick = () => { const r = rowOf(b.closest("tr")); S.rows.splice(r, 1); rebuild(); });
+  $$("#table .delrow").forEach(b => b.onclick = () => {
+    const r = rowOf(b.closest("tr")), gone = S.rows.splice(r, 1)[0]; rebuild();
+    toastAction(`Removed ${gone[4]}`, "Undo", () => { S.rows.splice(r, 0, gone); rebuild(); });
+  });
   const layersTop = [...S.data.layers].reverse();
   $$("#table .addrow").forEach(b => b.onclick = () => addRow(layersTop[+b.dataset.li]));
   const al = $("#addLayer"); if(al) al.onclick = () => {
@@ -1216,14 +1277,52 @@ function bindTips(){
 }
 
 /* ================= Export ================= */
-function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove("on"),2200) }
+function toastAction(m, label, fn){
+  const t=$("#toast"); t.innerHTML = `${esc(m)}<button>${esc(label)}</button>`; t.classList.add("on","act");
+  t.querySelector("button").onclick = () => { t.classList.remove("on","act"); fn(); };
+  clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove("on","act"),6000);
+}
+function toast(m){ const t=$("#toast"); t.classList.remove("act"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove("on"),2200) }
+// the image people paste into emails and decks: title, date and legend included, always in the light theme
+function exportSvg(){
+  const root = document.documentElement, prev = root.getAttribute("data-theme");
+  root.setAttribute("data-theme", "light");
+  try{
+    const layers = S.data.layers, top = Math.max(...layers.map(L=>L.attach+L.limit));
+    const chart = svg(layers, top), m = chart.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/), W = +m[1], Hc = +m[2];
+    const inner = chart.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "");
+    const ink = toHex(cssv("--ink")), muted = toHex(cssv("--muted")), navy = toHex(cssv("--navy")), surface = toHex(cssv("--surface"));
+    const prem = layers.reduce((s,L)=>s+L.prem,0), bandsP = S.bands.bands;
+    const p100 = bandsP.every(B=>B.price100) ? bandsP.reduce((s,B)=>s+B.price100,0) : null;
+    const date = new Date().toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"});
+    const sub = [`${fmtM(top)} program limit`, prem ? `Premium ${fmt$(prem)}` : "", S.tiv ? `TIV ${fmtM(S.tiv)}` : "", S.tiv && (p100||prem) ? `Rate ${fmtRate((p100||prem)/S.tiv*100)} per $100` : "", date].filter(Boolean).join("  ·  ");
+    const headH = 64, P = [];
+    P.push(`<text x="20" y="30" font-size="19" font-weight="700" fill="${navy}">${esc($("#title").value.trim() || "Program Schematic")}</text>`);
+    P.push(`<text x="20" y="50" font-size="12" fill="${muted}">${esc(sub)}</text>`);
+    // legend under the chart
+    const entries = S.colby==="mkt"
+      ? [...new Map(layers.flatMap(L=>L.lines).filter(l=>l.status!=="declined").map(l=>[mkey(l.market), l.market])).values()].map(n=>[mktColour(n), n])
+      : apList().map(a=>[apColour(a), a]);
+    let lx = 20, ly = headH + Hc + 8; const lg = [];
+    entries.forEach(([c, t]) => {
+      const w = 14 + 6 + tw(t, 12, 400) + 22;
+      if(lx + w > W - 20){ lx = 20; ly += 22; }
+      lg.push(`<rect x="${lx}" y="${ly}" width="12" height="12" rx="2" fill="${c}"/><text x="${lx+18}" y="${ly+10.5}" font-size="12" fill="${ink}">${esc(t)}</text>`);
+      lx += w;
+    });
+    const total = ly + 30;
+    return {W, H: total, svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${total}" width="${W}" height="${total}" font-family='${FONT}'><rect width="${W}" height="${total}" fill="${surface}"/>${P.join("")}<g transform="translate(0 ${headH})">${inner}</g>${lg.join("")}</svg>`};
+  } finally {
+    if(prev) root.setAttribute("data-theme", prev); else root.removeAttribute("data-theme");
+  }
+}
 function pngBlob(){
   return new Promise((res,rej)=>{
-    const el = $("#schem svg"); if(!el) return rej("none");
-    const w = +el.getAttribute("width"), h = +el.getAttribute("height"), img = new Image();
-    img.onload = ()=>{ const c=document.createElement("canvas"); c.width=w*2; c.height=h*2; const x=c.getContext("2d"); x.scale(2,2); x.drawImage(img,0,0); c.toBlob(res,"image/png") };
+    if(!S.data.layers.length) return rej("none");
+    const {W, H, svg: src} = exportSvg(), img = new Image();
+    img.onload = ()=>{ const c=document.createElement("canvas"); c.width=W*2; c.height=H*2; const x=c.getContext("2d"); x.scale(2,2); x.drawImage(img,0,0); c.toBlob(res,"image/png") };
     img.onerror = rej;
-    img.src = "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(el.outerHTML);
+    img.src = "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(src);
   });
 }
 $("#copyPng").onclick = async ()=>{ try{ const b=await pngBlob(); await navigator.clipboard.write([new ClipboardItem({"image/png":b})]); toast("Schematic copied as an image") }catch(e){ toast("Copy didn't work – use Download PNG") } };
@@ -1236,10 +1335,11 @@ $("#copyTsv").onclick = async ()=>{
 };
 
 /* ================= Saved programs (kept in this browser) + Excel file ================= */
-const EXPORT_HDR = ["Program","Layer","Limit","Attachment","Market","Access Point","Share %","Line $","Premium","100% Layer Premium","Status","Notes","Calculated"];
-const EXPORT_SIG = sig(EXPORT_HDR);
+const EXPORT_HDR = ["Program","Layer","Limit","Attachment","Market","Access Point","Share %","Line $","Premium","100% Layer Premium","Status","Notes","Calculated","TIV"];
+const EXPORT_SIG = sig(EXPORT_HDR), EXPORT_SIG_OLD = sig(EXPORT_HDR.slice(0,-1));
+const isExportSig = h => h===EXPORT_SIG || h===EXPORT_SIG_OLD;
 const EXPORT_MAP = {limit:2, attach:3, market:4, ap:5, share:6, line:7, prem:8, price:9, status:10, note:11, calc:12, __export:true};
-const EXPORT_FMT = [[2,"$#,##0"],[3,"$#,##0"],[6,"0.00%"],[7,"$#,##0"],[8,"$#,##0"],[9,"$#,##0"]];
+const EXPORT_FMT = [[2,"$#,##0"],[3,"$#,##0"],[6,"0.00%"],[7,"$#,##0"],[8,"$#,##0"],[9,"$#,##0"],[13,"$#,##0"]];
 
 // one row per carrier line, with every figure filled in; "Calculated" lists the ones we worked out
 function exportRows(name){
@@ -1258,7 +1358,7 @@ function exportRows(name){
       dec||x.prem==null ? "" : Math.round(x.prem),
       dec||x.price100==null ? "" : Math.round(x.price100),
       x.status==="firm" ? "Firm" : x.status==="indication" ? "Indication" : "Declined",
-      x.note||"", calc.join(", ")]);
+      x.note||"", calc.join(", "), rows.length===1 && S.tiv ? S.tiv : ""]);
   }));
   return rows;
 }
@@ -1278,6 +1378,11 @@ function updateLib(){
     + S.lib.map(p=>`<option value="${esc(p.name)}"${p===cur?" selected":""}>${esc(p.name)}</option>`).join("")
     + `<option value="__new">+ New program</option>`;
   $("#delProg").hidden = !cur;
+  // nudge to download when programs have been saved since the last Excel file (browser storage can be cleared)
+  const last = store.get("lastXlsx", 0), stale = S.lib.some(p => (p.saved||0) > last);
+  $("#xlsxOut").classList.toggle("stale", stale);
+  $("#xlsxOut").textContent = stale ? "Download Excel •" : "Download Excel";
+  $("#xlsxOut").title = (last ? `Last downloaded ${new Date(last).toLocaleString()}` : "Not downloaded yet") + (stale ? " – programs saved since then are only in this browser" : "");
   const has = S.data.layers.length>0;
   const same = cur && $("#title").value.trim()===cur.name && JSON.stringify(exportRows(cur.name))===S.snap;
   $("#dirty").hidden = !has || same;
@@ -1308,6 +1413,7 @@ function loadProgram(name){
   render();
 }
 function newProgram(){
+  setTiv(null);
   S.view = "import"; store.set("view", "import");
   S.cur = null; store.set("cur", null);
   $("#title").value = ""; store.set("title", "");
@@ -1335,10 +1441,11 @@ function downloadXlsx(){
     for(let r=1; r<p.rows.length; r++) EXPORT_FMT.forEach(([c,z]) => {
       const cell = ws[XLSX.utils.encode_cell({r,c})]; if(cell && typeof cell.v==="number") cell.z = z;
     });
-    ws["!cols"] = [24,16,14,14,26,14,9,14,14,18,11,30,30].map(w=>({wch:w}));
+    ws["!cols"] = [24,16,14,14,26,14,9,14,14,18,11,30,30,18].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb, ws, n);
   });
   XLSX.writeFile(wb, "Schematics.xlsx");
+  store.set("lastXlsx", Date.now()); updateLib();
   toast(`Downloaded ${S.lib.length} program${S.lib.length>1?"s":""}`);
 }
 // a workbook this tool exported: load every sheet as a saved program
@@ -1346,7 +1453,7 @@ function importLibrary(wb){
   const found = [];
   wb.SheetNames.forEach(sn => {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, raw:true, defval:""});
-    if(!rows.length || sig(rows[0])!==EXPORT_SIG) return;
+    if(!rows.length || !isExportSig(sig(rows[0]))) return;
     const body = rows.slice(1).filter(r=>r.some(c=>String(c).trim()!==""));
     const name = String(body[0]?.[0] ?? "").trim() || sn;
     found.push({name, rows:[rows[0], ...body], saved:Date.now()});
@@ -1357,13 +1464,29 @@ function importLibrary(wb){
   toast(`Loaded ${found.length} program${found.length>1?"s":""} – switch between them at the top`);
   return true;
 }
-$("#progSel").onchange = e => { const v = e.target.value; if(v==="__new") newProgram(); else if(v) loadProgram(v); else render(); };
+const unsaved = () => S.data.layers.length>0 && !$("#dirty").hidden;
+$("#progSel").onchange = e => {
+  const v = e.target.value;
+  if(v && unsaved() && !confirm(`${S.cur ? `“${S.cur}” has unsaved changes` : "This program isn't saved"}. Switch anyway and lose them?`)){ render(); return; }
+  if(v==="__new") newProgram(); else if(v) loadProgram(v); else render();
+};
+addEventListener("beforeunload", e => { if(unsaved()){ e.preventDefault(); e.returnValue = ""; } });
 $("#saveProg").onclick = () => saveProgram();
 $("#delProg").onclick = () => deleteProgram();
 $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.8", date:"2026-11-17", notes:[
+    "Copy Image and Download PNG include the program name, limit, premium, TIV, rate and date at the top and the legend at the bottom, and are always in the light theme",
+    "TIV box under the program name: shows the rate per $100 of TIV for the program and each layer; read automatically from a \"TIV: \u2026\" title row or a \"TIV $5.87B\" text line, and saved with the program and in the Excel file",
+    "Warnings fold into one line of chips, with Details to see each one",
+    "Open space is a soft grey hatch instead of red",
+    "Combine Repeat Carriers: one box per carrier per layer (shows when a carrier has more than one line on a layer)",
+    "Asks before switching programs or leaving the page with unsaved changes",
+    "Removing a line can be undone",
+    "Download Excel shows a dot when programs have been saved since the last download",
+    "Headline figures are a compact strip; the right-hand column is labelled; lighter grey for markets with no access point"]},
   {v:"1.7", date:"2026-11-17", notes:[
     "Readable layout has no empty gaps: every layer fills the full width, so it's always a clean rectangle",
     "Edit the schedule in place: click any cell (carrier, share, line, premium, 100% premium, status, notes), add a carrier to a layer, add a layer, or remove a line",
@@ -1452,6 +1575,8 @@ function setView(v){ S.view = v; store.set("view", v); render(); }
 $$("[data-view],[data-goto]").forEach(b=>b.onclick=()=>setView(b.dataset.view||b.dataset.goto));
 $$("[data-colby]").forEach(b=>b.onclick=()=>{ S.colby=b.dataset.colby; store.set("colby2",S.colby); render() });
 $$("[data-scale]").forEach(b=>b.onclick=()=>{ S.scale=b.dataset.scale; store.set("scale",S.scale); render() });
+$("#tiv").addEventListener("change", e => { setTiv(money(e.target.value)); render(); });
+$$("[data-combine]").forEach(b=>b.onclick=()=>{ S.combine=!S.combine; store.set("combine",S.combine); render(); });
 $$("[data-lbl]").forEach(b=>b.onclick=()=>{ S.lbl=b.dataset.lbl; store.set("lbl",S.lbl); render() });
 $("#sampleTbl").onclick = ()=>{ if(!$("#title").value) $("#title").value="Sample Property Program"; S.wb=null; loadRows(SAMPLE_TBL.map(r=>r.slice()), "Sample schedule.xlsx", "15 rows"); setView("schem"); };
 $("#sampleTxt").onclick = ()=>{ $("#src").value = SAMPLE_TXT; if(!$("#title").value) $("#title").value="Sample Property Program"; store.set("src", SAMPLE_TXT); rebuild(); };
