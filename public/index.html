@@ -4,555 +4,912 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Schematic Builder</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <style>
 :root{
-  --bg:#f6f7f9; --surface:#ffffff; --surface-2:#f1f3f6; --border:#dfe3e8; --text:#17202b; --muted:#5d6b7a;
-  --accent:#2457d6; --accent-ink:#ffffff; --warn:#b4540a; --bad:#c42b2b; --good:#1d7a46;
-  --open:#c42b2b; --hatch-bg:#fbeaea;
+  --bg:#f3f6f7; --surface:#ffffff; --raised:#fafbfd; --ink:#262835; --muted:#5d6e78; --line:#cddbde; --line-2:#e5eff0;
+  --accent:#007586; --accent-ink:#ffffff; --accent-hover:#023d57; --accent-soft:#d9f1f3; --navy:#262835; --bar:#262835; --th:#e5eff0;
+  --ok:#0b7a63; --ok-bg:#d6f5ec; --bad:#c8111a; --bad-bg:#fcdcdf; --warn:#8f5a00; --warn-bg:#fff4c2; --info:#0055a8; --info-bg:#e1edf8;
+  --input:#fdfdfd; --input-line:#adc0c4; --sb-sub:#3e4a55; --calc:#0055a8;
+  --f-sans:"Helvetica Now Text","HelveticaNowText","Helvetica Now","Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;
+  --r:2px;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0f1318; --surface:#171c23; --surface-2:#1f262f; --border:#2c3540; --text:#e7ecf2; --muted:#94a2b2;
-    --accent:#6f97ff; --accent-ink:#0f1318; --warn:#f0a35a; --bad:#ff7b7b; --good:#5fd197;
-    --open:#ff7b7b; --hatch-bg:#2a1a1c;
+    --bg:#14161f; --surface:#1c1e29; --raised:#222533; --ink:#e8eef0; --muted:#9fb0b7; --line:#343848; --line-2:#2a2d3b;
+    --accent:#29b0c3; --accent-ink:#0b1e24; --accent-hover:#78ccd7; --accent-soft:#0f343c; --navy:#dbe6ea; --bar:#0f1017; --th:#262a38;
+    --ok:#4fd1b0; --ok-bg:#11362e; --bad:#ff7a85; --bad-bg:#42161c; --warn:#ffc24d; --warn-bg:#3b2c0c; --info:#7fb4f0; --info-bg:#142b45;
+    --input:#171923; --input-line:#46506a; --sb-sub:#c3ced3; --calc:#7fb4f0;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0f1318; --surface:#171c23; --surface-2:#1f262f; --border:#2c3540; --text:#e7ecf2; --muted:#94a2b2;
-  --accent:#6f97ff; --accent-ink:#0f1318; --warn:#f0a35a; --bad:#ff7b7b; --good:#5fd197;
-  --open:#ff7b7b; --hatch-bg:#2a1a1c;
+  --bg:#14161f; --surface:#1c1e29; --raised:#222533; --ink:#e8eef0; --muted:#9fb0b7; --line:#343848; --line-2:#2a2d3b;
+  --accent:#29b0c3; --accent-ink:#0b1e24; --accent-hover:#78ccd7; --accent-soft:#0f343c; --navy:#dbe6ea; --bar:#0f1017; --th:#262a38;
+  --ok:#4fd1b0; --ok-bg:#11362e; --bad:#ff7a85; --bad-bg:#42161c; --warn:#ffc24d; --warn-bg:#3b2c0c; --info:#7fb4f0; --info-bg:#142b45;
+  --input:#171923; --input-line:#46506a; --sb-sub:#c3ced3; --calc:#7fb4f0;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
-body{background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,sans-serif;font-variant-numeric:tabular-nums}
-header{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap}
-header h1{font-size:18px;margin:0;font-weight:600;letter-spacing:-.01em}
-header .sp{flex:1}
-main{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:20px;padding:20px 24px;align-items:start}
-@media (max-width:900px){main{grid-template-columns:1fr;padding:16px}header{padding:12px 16px}}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:8px}
-.card>h2{font-size:13px;font-weight:600;margin:0;padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
-.card>h2 .sp{flex:1}
-.pad{padding:12px 14px}
-label.f{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500}
-input[type=text],textarea,select{width:100%;font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px}
-textarea{min-height:340px;resize:vertical;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre}
-input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
-button{font:inherit;font-weight:500;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px;padding:7px 12px;cursor:pointer}
-button:hover{background:var(--surface-2)}
-button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-sans);font-variant-numeric:tabular-nums lining-nums;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:var(--f-sans)}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 20px;background:var(--bar);color:#fff;border-bottom:3px solid var(--accent)}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:-.01em;color:#fff;white-space:nowrap;font-size:15px}
+.brand .mark{width:22px;height:22px;border-radius:2px;background:#007586;box-shadow:inset -7px 0 0 #29b0c3}
+.top .sp{flex:1}
+.top .prog{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:var(--r);padding:6px 10px;font-size:13px;min-width:260px}
+.top .prog::placeholder{color:rgba(255,255,255,.55)}
+.top .themes{display:flex;gap:4px}
+.top .themes button{background:transparent;border:1px solid rgba(255,255,255,.22);color:#e5eff0;border-radius:999px;padding:3px 10px;font:600 12px var(--f-sans);cursor:pointer}
+.top .themes button[aria-pressed=true]{background:#e5eff0;color:#262835;border-color:#e5eff0}
+
+main{padding:18px 20px 48px;display:grid;grid-template-columns:minmax(340px,440px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){main{grid-template-columns:minmax(0,1fr);padding:16px}.top{padding:10px 16px}.top .prog{min-width:0;flex:1}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.ph h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.015em;color:var(--navy)}
+.ph p{margin:4px 0 0;color:var(--muted)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;min-width:0}
+.card-h{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap}
+.card-h h2{margin:0;font-size:16px;font-weight:700;color:var(--navy)}
+.card-h .sub{margin:2px 0 0}
+.sub{color:var(--muted);margin:4px 0 0;font-size:13px}
+.muted{color:var(--muted)}
+
+.btn{font:600 13px var(--f-sans);border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:var(--r);padding:7px 16px;min-height:32px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.ghost:hover{background:var(--accent-soft)}
+.btn.sm{padding:3px 12px;min-height:28px;font-size:12.5px}
+.btn:focus-visible,.in:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
-.seg button{border:0;border-radius:0;padding:6px 10px}
-.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}
-.hint{font-size:12px;color:var(--muted)}
-.hint code{font:11.5px ui-monospace,Menlo,monospace;background:var(--surface-2);padding:1px 4px;border-radius:4px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
-.kpi{background:var(--surface);padding:10px 14px}
-.kpi .l{font-size:11.5px;color:var(--muted);font-weight:500}
-.kpi .v{font-size:18px;font-weight:600;margin-top:2px}
-.issues{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:4px}
+
+.tabs{display:flex;gap:2px;border-bottom:2px solid var(--line);margin-bottom:14px}
+.tabs button{font:600 13.5px var(--f-sans);padding:8px 14px;border:0;background:none;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}
+
+.seg-ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.seg-ctl .l{font:600 12px var(--f-sans);color:var(--muted);margin-right:2px}
+.seg-ctl button{font:600 12px var(--f-sans);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:var(--r);padding:5px 12px;cursor:pointer}
+.seg-ctl button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+.drop{display:block;border:1.5px dashed var(--input-line);border-radius:var(--r);background:var(--raised);padding:22px 14px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop b{display:block;color:var(--navy);font-size:14px}
+.drop span{color:var(--muted);font-size:12.5px}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:12px 0}
+.or:before,.or:after{content:"";flex:1;border-top:1px solid var(--line-2)}
+label.f{display:block;font:600 12px var(--f-sans);color:var(--muted);margin-bottom:4px}
+.in,textarea,select{width:100%;min-width:0;font:13px var(--f-sans);color:var(--ink);background:var(--input);border:1px solid var(--input-line);border-radius:var(--r);padding:6px 8px}
+textarea{min-height:120px;resize:vertical;white-space:pre;font-size:12.5px;line-height:1.45}
+textarea.tall{min-height:300px}
+
+/* mapping */
+.map{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:6px 10px;align-items:center}
+.map .fl{font-size:13px;font-weight:600;color:var(--ink)}
+.map .fl small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.map select.on{border-color:var(--accent);background:var(--accent-soft)}
+.map .req{color:var(--bad)}
+.filebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;background:var(--raised);border:1px solid var(--line-2);border-radius:var(--r);margin-bottom:12px;font-size:13px}
+.filebar b{color:var(--navy)}
+.filebar .sp{flex:1}
+.mini-grid{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:12px}
+.mini-grid th,.mini-grid td{border:1px solid var(--line-2);padding:3px 6px;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.mini-grid th{background:var(--th);font-weight:700}
+.mini-grid th.mapped{background:var(--accent-soft);color:var(--accent)}
+.prevwrap{overflow-x:auto}
+
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--r);font-size:12px;font-weight:600;white-space:nowrap;background:var(--raised);color:var(--muted);border:1px solid var(--line)}
+.chip.ok{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.chip.bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.chip.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.chip.info{background:var(--info-bg);color:var(--info);border-color:transparent}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+.kpi{border:1px solid var(--line);border-radius:var(--r);padding:8px 12px;background:var(--raised);display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .l{font-size:12px;color:var(--muted);font-weight:600}
+.kpi .v{font-size:18px;font-weight:700;color:var(--navy)}
+.issues{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
 .issues:empty{display:none}
-.issue{font-size:12.5px;display:flex;gap:6px;align-items:baseline}
-.issue b{font-weight:600}
-.issue.bad b{color:var(--bad)} .issue.warn b{color:var(--warn)} .issue.good b{color:var(--good)}
-#schem{padding:14px;overflow:hidden}
+.issue{font-size:13px;display:flex;gap:8px;align-items:baseline}
+.sch-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin-bottom:14px}
 #schem svg{display:block;width:100%;height:auto}
-.empty{padding:48px 20px;text-align:center;color:var(--muted)}
-table{width:100%;border-collapse:collapse;font-size:12.5px}
-th,td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
-th{font-weight:600;color:var(--muted);font-size:11.5px;background:var(--surface-2)}
-td.n,th.n{text-align:right}
-tr.layer td{background:var(--surface-2);font-weight:600}
-.tablewrap{overflow-x:auto}
-.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
-#tip{position:fixed;pointer-events:none;background:var(--text);color:var(--bg);font-size:12px;padding:6px 8px;border-radius:6px;max-width:280px;display:none;z-index:9;line-height:1.4}
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.empty{padding:48px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:var(--r)}
+.sch-legend{list-style:none;display:flex;flex-wrap:wrap;gap:6px 16px;margin:12px 0 0;padding:0;font-size:13px}
+.sch-legend li{display:flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:3px;display:inline-block;position:relative;flex:none}
+.sw input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;padding:0;border:0}
+.sw.edit{outline:1px solid var(--line);cursor:pointer}
+.sw.edit:hover{outline:2px solid var(--accent)}
+
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r)}
+table.grid{width:100%;border-collapse:collapse;font-size:13px}
+.grid th{background:var(--th);color:var(--ink);font-weight:700;font-size:12px;text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.grid td{padding:6px 8px;border-bottom:1px solid var(--line-2);white-space:nowrap}
+.grid .r{text-align:right}
+.grid tr.lh td{background:var(--raised);font-weight:700;color:var(--navy);border-bottom:1px solid var(--line)}
+.grid td.calc{color:var(--calc);font-style:italic}
+.grid select.apsel{width:auto;min-width:130px;padding:3px 6px;font-size:12.5px;border-color:transparent;background:transparent}
+.grid select.apsel:hover{border-color:var(--input-line)}
+.grid select.apsel.none{color:var(--muted)}
+details.help summary{cursor:pointer;font:600 13px var(--f-sans);color:var(--accent)}
+details.help ul{margin:6px 0 0 18px;padding:0;font-size:12.5px;color:var(--muted)}
+details.help code{font-size:12px;background:var(--raised);border:1px solid var(--line-2);padding:0 4px;border-radius:2px}
+#tip{position:fixed;pointer-events:none;background:var(--navy);color:var(--surface);font-size:12px;padding:7px 9px;border-radius:var(--r);max-width:300px;display:none;z-index:9;line-height:1.4;white-space:pre-line}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--surface);padding:8px 14px;border-radius:var(--r);font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10}
 .toast.on{opacity:1}
-details summary{cursor:pointer;font-size:12.5px;font-weight:500}
-details ul{margin:6px 0 0 16px;padding:0}
-details li{margin:2px 0}
+[hidden]{display:none!important}
 @media print{
-  header,.inputs,.noprint{display:none!important}
+  .top,.inputs,.noprint{display:none!important}
   main{display:block;padding:0}
   body{background:#fff}
-  .card{border:0}
+  .card{border:0;padding:0}
 }
 </style>
 </head>
 <body>
-<header>
-  <h1>Schematic Builder</h1>
-  <span class="hint">Paste an RFP schedule. Get a placement tower.</span>
+<header class="top">
+  <div class="brand"><span class="mark"></span>Schematic Builder</div>
+  <input class="prog" id="title" placeholder="Program name, e.g. Acme Property 2027 Renewal" aria-label="Program name">
   <span class="sp"></span>
-  <div class="seg" role="group" aria-label="Theme">
+  <div class="themes" role="group" aria-label="Theme">
     <button data-theme-btn="light">Light</button><button data-theme-btn="auto">Auto</button><button data-theme-btn="dark">Dark</button>
   </div>
 </header>
 
 <main>
-  <section class="card inputs">
-    <h2>Schedule <span class="sp"></span><button id="sample">Load Sample</button><button id="clear">Clear</button></h2>
-    <div class="pad" style="display:flex;flex-direction:column;gap:12px">
-      <div>
-        <label class="f" for="title">Program Name</label>
-        <input type="text" id="title" placeholder="e.g. Acme Property 2027 Renewal">
-      </div>
-      <div>
-        <label class="f" for="src">Paste Schedule</label>
-        <textarea id="src" spellcheck="false" placeholder="Paste from Excel, an email or the RFP…"></textarea>
-      </div>
-      <details>
-        <summary>What can I paste?</summary>
-        <div class="hint" style="margin-top:6px">
-          Free text, one quote per line, the same way Quick Add reads it:
-          <ul>
-            <li><code>$25M xs $25M</code> on its own line starts a layer</li>
-            <li><code>P$25M</code> or <code>Primary $25M</code> is the primary layer</li>
-            <li><code>Chubb 25% @ $1.2M</code> means 25% at a 100% price of $1.2M</li>
-            <li><code>Zurich 20% prem $240k</code> is the premium for that share</li>
-            <li><code>Allianz 15% p/o $50M xs $50M</code> puts the line on that layer</li>
-            <li><code>ind</code> or <code>indication</code> marks a non-firm line; <code>declined</code> is listed but not placed</li>
-            <li>Text in <code>(brackets)</code> becomes a note</li>
-          </ul>
-          Or paste a table from Excel with headers such as Layer, Limit, Attachment, Market, Share and Premium.
-        </div>
-      </details>
-    </div>
-  </section>
+  <div class="col inputs">
+    <div class="ph"><h1>Build a Schematic</h1><p>Upload the RFP schedule, match its columns, and see the tower.</p></div>
 
-  <section style="display:flex;flex-direction:column;gap:20px;min-width:0">
-    <div class="card">
-      <h2>
-        <span id="progTitle">Program Schematic</span><span class="sp"></span>
-        <span class="noprint row">
-          <span class="seg" role="group" aria-label="Scale">
-            <button data-scale="uniform" aria-pressed="true">Uniform</button><button data-scale="prop">To Scale</button>
-          </span>
-          <span class="seg" role="group" aria-label="Labels">
-            <button data-lbl="share" aria-pressed="true">Share</button><button data-lbl="prem">Premium</button><button data-lbl="line">Line $</button>
-          </span>
-          <button id="copyPng">Copy Image</button>
-          <button id="dlPng">Download PNG</button>
-          <button id="print">Print</button>
-        </span>
-      </h2>
+    <section class="card">
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="table" aria-selected="true">Upload Table</button>
+        <button role="tab" data-tab="text" aria-selected="false">Quick Add Text</button>
+      </div>
+
+      <div data-pane="table">
+        <div id="loadArea">
+          <label class="drop" id="drop">
+            <input type="file" id="file" accept=".xlsx,.xlsm,.xls,.csv,.tsv,.txt" hidden>
+            <b>Drop an Excel or CSV file here</b>
+            <span>or click to choose a file (.xlsx, .xls, .csv)</span>
+          </label>
+          <div class="or">or paste from Excel</div>
+          <textarea id="paste" placeholder="Copy the rows in Excel, including the header row, and paste here"></textarea>
+          <div class="row" style="margin-top:10px"><button class="btn ghost sm" id="sampleTbl">Load Sample Table</button></div>
+        </div>
+
+        <div id="mapArea" hidden>
+          <div class="filebar">
+            <span>📄</span><b id="srcName">Pasted table</b><span class="muted" id="srcInfo"></span><span class="sp"></span>
+            <button class="btn ghost sm" id="newSrc">Change File</button>
+          </div>
+          <div class="row" style="margin-bottom:12px;gap:12px">
+            <div id="sheetWrap" style="flex:1;min-width:150px"><label class="f" for="sheet">Sheet</label><select id="sheet"></select></div>
+            <div style="width:130px"><label class="f" for="hdr">Header row</label><input class="in" type="number" min="1" id="hdr"></div>
+          </div>
+          <div class="card-h" style="margin-bottom:8px"><div><h2>Match Columns</h2><p class="sub">Each field is guessed from your headers. Change any that look wrong.</p></div></div>
+          <div class="map" id="map"></div>
+          <div class="prevwrap"><table class="mini-grid" id="prev"></table></div>
+        </div>
+      </div>
+
+      <div data-pane="text" hidden>
+        <label class="f" for="src">Paste lines, one quote per line</label>
+        <textarea id="src" class="tall" spellcheck="false" placeholder="$50M xs $25M&#10;Chubb 25% @ $1.1M [London]&#10;Zurich 20% prem $240k"></textarea>
+        <div class="row" style="margin:10px 0"><button class="btn ghost sm" id="sampleTxt">Load Sample Text</button></div>
+        <details class="help">
+          <summary>What can I paste?</summary>
+          <ul>
+            <li><code>$50M xs $25M</code> on its own line starts a layer; <code>P$25M</code> is the primary</li>
+            <li><code>Chubb 25% @ $1.1M</code> is 25% at a 100% price of $1.1M</li>
+            <li><code>Zurich 20% prem $240k</code> is their premium for that share</li>
+            <li><code>AIG $10M line</code> is a $ capacity line; the share is worked out</li>
+            <li>An access point in brackets: <code>[London]</code>, <code>(Bermuda)</code>, <code>(ACT)</code></li>
+            <li><code>ind</code> marks an indication; <code>declined</code> is listed, not placed</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card">
+      <div class="card-h">
+        <div><h2 id="progTitle">Program Schematic</h2><p class="sub" id="progSub">Nothing loaded yet</p></div>
+        <div class="row noprint">
+          <button class="btn ghost sm" id="copyPng">Copy Image</button>
+          <button class="btn ghost sm" id="dlPng">Download PNG</button>
+          <button class="btn ghost sm" id="print">Print</button>
+        </div>
+      </div>
       <div class="kpis" id="kpis"></div>
       <div class="issues" id="issues"></div>
-      <div id="schem"><div class="empty">Paste a schedule on the left, or click Load Sample.</div></div>
-    </div>
+      <div class="sch-ctl noprint">
+        <div class="seg-ctl"><span class="l">Colour by</span><button data-colby="ap">Access Point</button><button data-colby="mkt">Market</button></div>
+        <div class="seg-ctl"><span class="l">Height</span><button data-scale="uniform">Uniform</button><button data-scale="prop">To Scale</button></div>
+        <div class="seg-ctl"><span class="l">Show</span><button data-lbl="share">Share</button><button data-lbl="prem">Premium</button><button data-lbl="line">Line $</button></div>
+      </div>
+      <div id="schem"><div class="empty">Upload or paste a schedule to build the schematic.</div></div>
+      <ul class="sch-legend" id="legend"></ul>
+      <p class="sub noprint" id="legendHint" hidden>Click a colour to change it. Markets without an access point use the grey “Not assigned” colour; set one in the table below.</p>
+    </section>
 
-    <div class="card">
-      <h2>Schedule Detail<span class="sp"></span><button class="noprint" id="copyTsv">Copy as Table</button></h2>
-      <div class="tablewrap" id="table"></div>
-    </div>
-  </section>
+    <section class="card">
+      <div class="card-h">
+        <div><h2>Schedule Detail</h2><p class="sub">Premiums in <span style="color:var(--calc);font-style:italic">blue italics</span> are calculated from the layer's 100% premium.</p></div>
+        <button class="btn ghost sm noprint" id="copyTsv">Copy as Table</button>
+      </div>
+      <div class="tbl-wrap" id="table"><div class="empty" style="border:0">No data yet.</div></div>
+    </section>
+  </div>
 </main>
 <div id="tip"></div>
 <div class="toast" id="toast"></div>
 
 <script>
 (() => {
+"use strict";
 const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const store = {
-  get(k, d){ try{ const v = localStorage.getItem('sb.'+k); return v==null?d:v }catch(e){ return d } },
-  set(k, v){ try{ localStorage.setItem('sb.'+k, v) }catch(e){} }
+  get(k, d){ try{ const v = localStorage.getItem("sb2."+k); return v==null ? d : JSON.parse(v) }catch(e){ return d } },
+  set(k, v){ try{ localStorage.setItem("sb2."+k, JSON.stringify(v)) }catch(e){} }
 };
 
-/* ---------- Theme ---------- */
+/* ================= Access points (same set and colours as Quote Desk) ================= */
+const AP = ["Direct","Wholesale","London","Bermuda","Aon facility","Captive","Other"];
+const AP_COL_L = {Direct:"#0055a8",Wholesale:"#a70171",London:"#0184bc","Aon facility":"#01577d",Bermuda:"#e85d10",Other:"#6f027f",Captive:"#13a88a"};
+const AP_COL_D = {Direct:"#4a8fdc",Wholesale:"#d0459a",London:"#3bb0e0","Aon facility":"#1f86b3",Bermuda:"#f27a33",Other:"#a25fc0",Captive:"#3fcca9"};
+const EXTRA_L = ["#007586","#c8174f","#29b0c3","#7aa61a","#b38b00","#5d6e78"];
+const EXTRA_D = ["#29b0c3","#f0507f","#78ccd7","#a3cc4a","#d9b23a","#9fb0b7"];
+const NONE = "Not assigned";
+const NONE_L = "#8c9aa3", NONE_D = "#6c7a84";
+const MKT_L = ["#0055a8","#a70171","#0184bc","#e85d10","#6f027f","#13a88a","#007586","#c8174f","#29b0c3","#7aa61a","#b38b00","#01577d"];
+const MKT_D = ["#4a8fdc","#d0459a","#3bb0e0","#f27a33","#a25fc0","#3fcca9","#29b0c3","#f0507f","#78ccd7","#a3cc4a","#d9b23a","#1f86b3"];
+
+function normAP(s){
+  const x = String(s||"").trim(); if(!x) return "";
+  const l = x.toLowerCase();
+  if(/^(n\/?a|none|-|–|tbc|unknown)$/.test(l)) return "";
+  if(/aon facility|\bact\b|\bgpf\b|facility/.test(l)) return "Aon facility";
+  if(/lloyd|london/.test(l)) return "London";
+  if(/bermuda/.test(l)) return "Bermuda";
+  if(/wholesale|\bmga\b|e&s|surplus/.test(l)) return "Wholesale";
+  if(/direct|domestic|retail/.test(l)) return "Direct";
+  if(/captive/.test(l)) return "Captive";
+  if(/^other$/.test(l)) return "Other";
+  return x.replace(/\s+/g," ");
+}
+
+/* ================= Theme ================= */
+function isDark(){
+  const t = document.documentElement.getAttribute("data-theme");
+  return t ? t==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+}
 function applyTheme(t){
-  if(t==='auto') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', t);
-  document.querySelectorAll('[data-theme-btn]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.themeBtn===t));
-  store.set('theme', t); render();
+  if(t==="auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t);
+  $$("[data-theme-btn]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.themeBtn===t));
+  store.set("theme", t); render();
 }
-document.querySelectorAll('[data-theme-btn]').forEach(b=>b.onclick=()=>applyTheme(b.dataset.themeBtn));
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>render());
+$$("[data-theme-btn]").forEach(b=>b.onclick=()=>applyTheme(b.dataset.themeBtn));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", ()=>render());
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-/* ---------- Money ---------- */
+/* ================= Numbers ================= */
 function money(raw, bareMeansMillions){
-  if(raw==null) return null;
-  let s = String(raw).trim().toLowerCase().replace(/[$£€\s]/g,'').replace(/usd|aud|gbp|eur/g,'');
-  const m = s.match(/^([\d,]*\.?\d+)(bn|b|mm|mil|m|k)?$/);
+  if(raw==null || raw==="") return null;
+  if(typeof raw==="number") return bareMeansMillions && raw<100000 ? raw*1e6 : raw;
+  let s = String(raw).trim().toLowerCase();
+  const neg = /^\(.*\)$/.test(s); s = s.replace(/[()$£€\s]|usd|aud|gbp|eur|cad|nzd/g,"");
+  const m = s.match(/^-?([\d,]*\.?\d+)(bn|b|mm|mil|m|k)?$/);
   if(!m) return null;
-  let n = parseFloat(m[1].replace(/,/g,''));
+  let n = parseFloat(m[1].replace(/,/g,""));
   const u = m[2];
-  if(u==='bn'||u==='b') n*=1e9;
-  else if(u==='m'||u==='mm'||u==='mil') n*=1e6;
-  else if(u==='k') n*=1e3;
+  if(u==="bn"||u==="b") n*=1e9; else if(u==="m"||u==="mm"||u==="mil") n*=1e6; else if(u==="k") n*=1e3;
   else if(bareMeansMillions && n<100000) n*=1e6;
-  return n;
+  return neg ? -n : n;
 }
-const NUM = String.raw`\$?\s*[\d,]*\.?\d+\s*(?:bn|mm|mil|m|k|b)?\b`;
-const reXS = new RegExp(String.raw`(${NUM})\s*(?:xs\.?|x\/s|excess\s+of|in\s+excess\s+of)\s*(${NUM})`, 'i');
-const rePrimary = new RegExp(String.raw`(?:^|[\s(])(?:p|primary)\s*(${NUM})`, 'i');
-
+function pctNum(raw){
+  if(raw==null || raw==="") return null;
+  if(typeof raw==="number") return raw;
+  const s = String(raw).replace(/[,\s]/g,"");
+  const m = s.match(/^(-?[\d.]+)%?$/); if(!m) return null;
+  const n = parseFloat(m[1]); return isNaN(n) ? null : n;
+}
+const trim2 = x => (Math.round(x*100)/100).toString();
 function fmtM(n){
-  if(n==null||isNaN(n)) return '–';
+  if(n==null||isNaN(n)) return "–";
   const a=Math.abs(n);
-  if(a>=1e9) return '$'+trim(n/1e9)+'B';
-  if(a>=1e6) return '$'+trim(n/1e6)+'M';
-  if(a>=1e3) return '$'+trim(n/1e3)+'k';
-  return '$'+Math.round(n);
+  if(a>=1e9) return "$"+trim2(n/1e9)+"B";
+  if(a>=1e6) return "$"+trim2(n/1e6)+"M";
+  if(a>=1e3) return "$"+trim2(n/1e3)+"k";
+  return "$"+Math.round(n);
 }
-function trim(x){ return (Math.round(x*100)/100).toString() }
-function fmt$(n){ return n==null||isNaN(n)?'–':'$'+Math.round(n).toLocaleString('en-US') }
-function fmtPct(n,d=2){ if(n==null||isNaN(n)) return '–'; return (Math.round(n*Math.pow(10,d))/Math.pow(10,d)).toString()+'%' }
-function layerName(L){ return L.attach===0 ? 'P'+fmtM(L.limit) : fmtM(L.limit)+' xs '+fmtM(L.attach) }
-
-/* ---------- Parser ---------- */
+const fmt$ = n => n==null||isNaN(n) ? "–" : "$"+Math.round(n).toLocaleString("en-US");
+function fmtPct(n,d=2){ if(n==null||isNaN(n)) return "–"; const p=Math.pow(10,d); return (Math.round(n*p)/p).toString()+"%" }
+const layerName = L => L.attach===0 ? "P"+fmtM(L.limit) : fmtM(L.limit)+" xs "+fmtM(L.attach);
+const NUM = String.raw`\$?\s*[\d,]*\.?\d+\s*(?:bn|mm|mil|m|k|b)?\b`;
+const reXS = new RegExp(String.raw`(${NUM})\s*(?:xs\.?|x\/s|excess\s+of|in\s+excess\s+of)\s*(${NUM})`, "i");
+const rePrimary = new RegExp(String.raw`(?:^|[\s(])(?:p|primary)\s*(${NUM})`, "i");
 function findLayer(text){
-  let m = text.match(reXS);
-  if(m){ const lim=money(m[1],true), att=money(m[2],true); if(lim&&att!=null) return {limit:lim,attach:att,match:m[0]}; }
-  m = text.match(rePrimary);
+  let m = String(text).match(reXS);
+  if(m){ const lim=money(m[1],true), att=money(m[2],true); if(lim && att!=null) return {limit:lim,attach:att,match:m[0]}; }
+  m = String(text).match(rePrimary);
   if(m){ const lim=money(m[1],true); if(lim) return {limit:lim,attach:0,match:m[0]}; }
   return null;
 }
-
-function parse(text){
-  const lines = text.replace(/\r/g,'').split('\n');
-  const tabbed = lines.filter(l=>l.includes('\t')).length >= 2;
-  return tabbed ? parseTable(lines) : parseFree(lines);
+function statusOf(s){
+  const l = String(s||"").toLowerCase();
+  if(/declin|\bnil\b|no ?quote|\bnq\b|not quoting/.test(l)) return "declined";
+  if(/\bind\b|indicat|\btbc\b|subject|non-?binding|pending/.test(l)) return "indication";
+  return "firm";
 }
 
-function parseFree(lines){
-  const layers = new Map(); const unread = [];
-  let cur = null;
-  const getLayer = (lim, att, label) => {
-    const k = att+'|'+lim;
-    if(!layers.has(k)) layers.set(k,{attach:att,limit:lim,label:label||'',lines:[]});
-    else if(label && !layers.get(k).label) layers.get(k).label = label;
-    return layers.get(k);
-  };
-  lines.forEach((raw, i) => {
-    let line = raw.trim();
-    if(!line || /^[-=_*#\s]+$/.test(line)) return;
-    let notes = [];
-    line = line.replace(/[([]([^)\]]*)[)\]]/g, (_, n) => { notes.push(n.trim()); return ' ' });
-    const L = findLayer(line);
-    let rest = L ? line.replace(L.match,' ') : line;
-    rest = rest.replace(/\bp\/o\b|\bpart\s+of\b/ig,' ');
-    let share = null, prem = null, price100 = null;
-    const pm = rest.match(/(?:@|\bprice\b:?)\s*(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)/i);
-    if(pm){ price100 = money(pm[1]); rest = rest.replace(pm[0],' '); }
-    const prm = rest.match(/\bprem(?:ium)?\b:?\s*(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)/i) || rest.match(/(\$\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)\s*prem(?:ium)?\b/i);
-    if(prm){ prem = money(prm[1]); rest = rest.replace(prm[0],' '); }
-    const sm = rest.match(/([\d.]+)\s*%/);
-    if(sm){ share = parseFloat(sm[1]); rest = rest.replace(sm[0],' '); }
-    if(prem==null){ const dm = rest.match(/\$\s*[\d,]*\.?\d+\s*(?:mm|m|k)?/i); if(dm && share!=null){ prem = money(dm[0]); rest = rest.replace(dm[0],' ') } }
-    let status = 'firm';
-    if(/\b(ind|indication|indicative|tbc|subject)\b/i.test(rest)) status='indication';
-    if(/\b(declined?|nil|no\s*quote|nq)\b/i.test(rest)) status='declined';
-    rest = rest.replace(/\b(ind|indication|indicative|tbc|subject|declined?|nil|no\s*quote|nq|firm|line|share|written|signed|on|of|at|for|layer\s*\d*)\b/ig,' ');
-    let name = rest.replace(/[:;,|–—\-]+/g,' ').replace(/\s+/g,' ').trim();
-
-    if(L && share==null && prem==null && price100==null && status==='firm'){
-      cur = getLayer(L.limit, L.attach, name); return;  // layer header line
-    }
-    if(share==null && status!=='declined'){ unread.push({n:i+1, text:raw.trim()}); return; }
-    const target = L ? getLayer(L.limit, L.attach) : cur;
-    if(!target){ unread.push({n:i+1, text:raw.trim(), why:'no layer above it'}); return; }
-    if(!name) name = 'Unnamed market';
-    if(price100==null && prem!=null && share) price100 = prem/(share/100);
-    if(prem==null && price100!=null && share!=null) prem = price100*share/100;
-    target.lines.push({market:name, share:share||0, prem, price100, status, note:notes.join('; ')});
+/* ================= Column matching ================= */
+const FIELDS = [
+  {k:"market", l:"Market / Carrier", req:true},
+  {k:"ap",     l:"Access Point", hint:"Blank = Not assigned"},
+  {k:"layer",  l:"Layer", hint:"e.g. $50M xs $25M"},
+  {k:"limit",  l:"Layer Limit", hint:"If not in Layer"},
+  {k:"attach", l:"Attachment", hint:"If not in Layer"},
+  {k:"share",  l:"Share %", hint:"% of the layer's capacity"},
+  {k:"line",   l:"Line $", hint:"$ capacity, if no Share %"},
+  {k:"prem",   l:"Carrier Premium", hint:"Premium for their share"},
+  {k:"price",  l:"100% Layer Premium", hint:"Optional"},
+  {k:"status", l:"Status", hint:"Firm / Indication / Declined"},
+  {k:"note",   l:"Notes"}
+];
+// guess order matters: specific before generic
+const GUESS = [
+  ["price",  /100\s*%|layer prem|100 ?% ?(price|prem)|full layer|gross layer|technical/],
+  ["ap",     /access|platform|channel|\bvia\b|route|placement|market type|\bmarket(place)? ?(loc|location)\b/],
+  ["status", /status|firm\/|quote type|\btype\b/],
+  ["note",   /note|comment|subject|condition|remark|terms/],
+  ["attach", /attach|excess|\bxs\b|retention|deductible/],
+  ["limit",  /limit|layer size|layer \(\$\)|layer \$|layer amount/],
+  ["layer",  /^layer|layer$|structure|layer desc|layer name|program layer/],
+  ["market", /market|carrier|insurer|reinsurer|underwriter|company|security|syndicate|paper/],
+  ["share",  /share|%|percent|particip|written|signed|of capacity|order/],
+  ["line",   /line|capacity|amount|\$ ?cap/],
+  ["prem",   /prem|cost|price/]
+];
+function guessMap(headers){
+  const used = new Set(), map = {};
+  const H = headers.map(h => String(h||"").toLowerCase().trim());
+  for(const [k, re] of GUESS){
+    const i = H.findIndex((h, j) => h && !used.has(j) && re.test(h));
+    if(i>=0){ map[k]=i; used.add(i); }
+  }
+  return map;
+}
+function detectHeaderRow(rows){
+  let best = 0, bestScore = -1;
+  rows.slice(0, 20).forEach((r, i) => {
+    const cells = r.filter(c => String(c??"").trim()!=="");
+    if(cells.length < 2) return;
+    const textish = cells.filter(c => typeof c==="string" && !/^[\d$.,%()\s-]+$/.test(c)).length;
+    const hits = Object.keys(guessMap(r)).length;
+    const score = hits*3 + textish - (cells.length - textish);
+    if(score > bestScore){ bestScore = score; best = i; }
   });
-  return finish(layers, unread);
+  return best;
 }
 
-function parseTable(lines){
-  const rows = lines.filter(l=>l.trim()).map(l=>l.split('\t').map(c=>c.trim()));
-  const hi = rows.findIndex(r => r.some(c=>/market|insurer|carrier|reinsurer|underwriter/i.test(c)));
-  const unread = [];
-  if(hi<0) return parseFree(lines.map(l=>l.replace(/\t/g,' ')));
-  const H = rows[hi].map(h=>h.toLowerCase());
-  const col = re => H.findIndex(h=>re.test(h));
-  const c = {
-    market: col(/market|insurer|carrier|reinsurer|underwriter/),
-    share: col(/share|%|line|particip|written|signed/),
-    layer: col(/layer|structure/),
-    limit: col(/^limit|limit$|layer limit/),
-    attach: col(/attach|excess|xs|deduct|retention/),
-    prem: col(/prem/),
-    price: col(/100%|price|rate/),
-    status: col(/status|firm|type/),
-    note: col(/note|comment|subject|condition/)
-  };
-  const layers = new Map(); let cur=null;
-  rows.slice(hi+1).forEach((r,i) => {
-    const get = k => c[k]>=0 ? (r[c[k]]||'') : '';
+/* ================= State ================= */
+const S = {
+  tab: store.get("tab","table"),
+  colby: store.get("colby","ap"), scale: store.get("scale","uniform"), lbl: store.get("lbl","share"),
+  apCol: store.get("apCol",{}),          // user colour overrides per access point
+  apSet: store.get("apSet",{}),          // user access point per market key
+  wb: null, srcName: "", sheet: 0, hdr: 0, map: {}, rows: [],
+  data: {layers:[], unread:[], calc:0}
+};
+
+/* ================= Loading tables ================= */
+function rowsFromText(txt){
+  const lines = txt.replace(/\r/g,"").split("\n").filter(l=>l.trim()!=="");
+  const tab = lines.some(l=>l.includes("\t"));
+  return lines.map(l => tab ? l.split("\t") : splitCSV(l)).map(r=>r.map(c=>c.trim()));
+}
+function splitCSV(line){
+  const out=[]; let cur="", q=false;
+  for(let i=0;i<line.length;i++){ const c=line[i];
+    if(q){ if(c==='"'){ if(line[i+1]==='"'){cur+='"';i++} else q=false } else cur+=c }
+    else if(c==='"') q=true; else if(c===','){ out.push(cur); cur="" } else cur+=c; }
+  out.push(cur); return out;
+}
+function loadRows(rows, name, info){
+  S.rows = rows.map(r => r.map(c => c==null ? "" : c));
+  S.srcName = name;
+  S.hdr = detectHeaderRow(S.rows);
+  const saved = store.get("map:"+sig(S.rows[S.hdr]||[]), null);
+  S.map = saved || guessMap(S.rows[S.hdr]||[]);
+  $("#srcName").textContent = name; $("#srcInfo").textContent = info||"";
+  $("#hdr").value = S.hdr+1;
+  $("#sheetWrap").hidden = !S.wb || S.wb.SheetNames.length < 2;
+  $("#loadArea").hidden = true; $("#mapArea").hidden = false;
+  renderMap(); rebuild();
+}
+const sig = h => h.map(x=>String(x).toLowerCase().trim()).join("|");
+function loadWorkbook(wb, name){
+  S.wb = wb;
+  const sel = $("#sheet");
+  sel.innerHTML = wb.SheetNames.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join("");
+  $("#sheetWrap").hidden = wb.SheetNames.length < 2;
+  // pick the sheet that looks most like a schedule
+  let best = 0, bestN = -1;
+  wb.SheetNames.forEach((n,i) => { const r = sheetRows(i); const h = r[detectHeaderRow(r)]||[]; const k = Object.keys(guessMap(h)).length; if(k>bestN){bestN=k;best=i} });
+  sel.value = best; S.sheet = best;
+  const rows = sheetRows(best);
+  loadRows(rows, name, `${rows.length} rows`);
+}
+function sheetRows(i){
+  const ws = S.wb.Sheets[S.wb.SheetNames[i]];
+  return XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:"", blankrows:true});
+}
+function readFile(f){
+  const name = f.name;
+  if(/\.(csv|tsv|txt)$/i.test(name)){
+    f.text().then(t => { S.wb=null; loadRows(rowsFromText(t), name) });
+    return;
+  }
+  if(!window.XLSX){ toast("Excel reader still loading – try again in a moment"); return; }
+  f.arrayBuffer().then(buf => {
+    try{ loadWorkbook(XLSX.read(buf, {type:"array"}), name) }
+    catch(e){ toast("Couldn't read that file. Try saving it as .xlsx or .csv"); }
+  });
+}
+const drop = $("#drop");
+$("#file").addEventListener("change", e => { const f = e.target.files[0]; if(f) readFile(f); e.target.value=""; });
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over") }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over") }));
+drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if(f) readFile(f) });
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => { if(!drop.contains(e.target)){ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f){ setTab("table"); readFile(f) } } });
+$("#paste").addEventListener("paste", () => setTimeout(() => { const t=$("#paste").value; S.wb=null; if(t.trim()) loadRows(rowsFromText(t), "Pasted table"); }, 0));
+$("#paste").addEventListener("change", () => { const t=$("#paste").value; if(t.trim() && $("#mapArea").hidden){ S.wb=null; loadRows(rowsFromText(t), "Pasted table"); } });
+$("#newSrc").onclick = () => { $("#loadArea").hidden=false; $("#mapArea").hidden=true; $("#paste").value=""; S.rows=[]; S.wb=null; rebuild(); };
+$("#sheet").onchange = e => { S.sheet = +e.target.value; const r = sheetRows(S.sheet); loadRows(r, S.srcName, `${r.length} rows`); };
+$("#hdr").onchange = e => { S.hdr = Math.max(0, Math.min(S.rows.length-1, (+e.target.value||1)-1)); S.map = guessMap(S.rows[S.hdr]||[]); renderMap(); rebuild(); };
+
+function renderMap(){
+  const H = S.rows[S.hdr] || [];
+  const opts = i => `<option value="">— Not used —</option>` + H.map((h,j)=>`<option value="${j}"${i===j?" selected":""}>${esc(String(h).trim()||("Column "+colLetter(j)))}</option>`).join("");
+  $("#map").innerHTML = FIELDS.map(f => `<div class="fl">${esc(f.l)}${f.req?' <span class="req">*</span>':""}${f.hint?`<small>${esc(f.hint)}</small>`:""}</div>
+    <select data-map="${f.k}" class="${S.map[f.k]!=null?"on":""}">${opts(S.map[f.k])}</select>`).join("");
+  $$("[data-map]").forEach(s => s.onchange = () => {
+    const k = s.dataset.map, v = s.value==="" ? null : +s.value;
+    if(v==null) delete S.map[k]; else { for(const kk in S.map) if(S.map[kk]===v && kk!==k) delete S.map[kk]; S.map[k]=v; }
+    store.set("map:"+sig(S.rows[S.hdr]||[]), S.map);
+    renderMap(); rebuild();
+  });
+  // preview
+  const mappedBy = {}; for(const k in S.map) mappedBy[S.map[k]] = FIELDS.find(f=>f.k===k).l;
+  const body = S.rows.slice(S.hdr+1, S.hdr+6);
+  const n = Math.min(H.length, 14);
+  $("#prev").innerHTML = `<thead><tr>${H.slice(0,n).map((h,j)=>`<th class="${mappedBy[j]?"mapped":""}" title="${esc(h)}">${esc(mappedBy[j]||String(h)||colLetter(j))}</th>`).join("")}</tr></thead><tbody>${body.map(r=>`<tr>${r.slice(0,n).map(c=>`<td title="${esc(c)}">${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody>`;
+}
+const colLetter = j => String.fromCharCode(65 + (j%26)) + (j>=26 ? Math.floor(j/26) : "");
+
+/* ================= Parsing ================= */
+function parseTable(){
+  const m = S.map, rows = S.rows.slice(S.hdr+1), unread = [], raw = [];
+  if(m.market==null) return {raw, unread, problem:"Pick the column that holds the market or carrier name."};
+  const get = (r,k) => m[k]!=null ? r[m[k]] : "";
+  // share column given as fractions (0.25) or percents (25)?
+  const shareVals = m.share!=null ? rows.map(r=>pctNum(r[m.share])).filter(v=>v!=null && v>0) : [];
+  const fraction = shareVals.length>0 && shareVals.every(v=>v<=1) && !rows.some(r=>String(r[m.share]).includes("%"));
+  let curLayer = null;
+  rows.forEach((r, i) => {
+    const rowNo = S.hdr + i + 2;
+    const name = String(get(r,"market")??"").trim();
+    // layer: from Layer text, else Limit + Attachment; blank cells carry down (merged cells)
     let L = null;
-    if(get('limit')) { const lim=money(get('limit'),true); const att=money(get('attach')||'0',true)||0; if(lim) L={limit:lim,attach:att}; }
-    if(!L && get('layer')) L = findLayer(get('layer'));
-    if(L){ const k=L.attach+'|'+L.limit; if(!layers.has(k)) layers.set(k,{attach:L.attach,limit:L.limit,label:'',lines:[]}); cur=layers.get(k); }
-    const name = get('market');
+    const lt = get(r,"layer");
+    if(lt!==""){
+      L = findLayer(String(lt));
+      if(!L){ const lim = money(lt,true); if(lim) L = {limit:lim, attach: money(get(r,"attach"),true) ?? 0}; }
+    }
+    if(!L && get(r,"limit")!==""){ const lim = money(get(r,"limit"),true); if(lim) L = {limit:lim, attach: money(get(r,"attach"),true) ?? 0}; }
+    if(L) curLayer = L;
     if(!name){ return; }
-    if(!cur){ unread.push({n:hi+i+2,text:r.join('  '),why:'no layer'}); return; }
-    const share = parseFloat(String(get('share')).replace('%',''));
-    let prem = money(get('prem')); let price100 = money(get('price'));
-    if(price100!=null && price100 < 100) price100 = null; // probably a rate, not a price
-    let status='firm'; const st=(get('status')+' '+get('note')).toLowerCase();
-    if(/ind|tbc|subject/.test(st)) status='indication';
-    if(/declin|nil|no quote/.test(st)) status='declined';
-    if(isNaN(share) && status!=='declined'){ unread.push({n:hi+i+2,text:r.join('  ')}); return; }
-    if(price100==null && prem!=null && share) price100 = prem/(share/100);
-    if(prem==null && price100!=null && !isNaN(share)) prem = price100*share/100;
-    cur.lines.push({market:name, share:isNaN(share)?0:share, prem, price100, status, note:get('note')});
+    if(/^(total|sub ?total|layer total)/i.test(name)) return;
+    if(!curLayer){ unread.push({n:rowNo, text:name, why:"no layer found for this row"}); return; }
+    let share = pctNum(get(r,"share")); if(share!=null && fraction) share *= 100;
+    const line = money(get(r,"line"));
+    const prem = money(get(r,"prem"));
+    const price = money(get(r,"price"));
+    const st = statusOf(get(r,"status")+" "+(m.status==null?get(r,"note"):""));
+    raw.push({row:rowNo, market:name, ap:normAP(get(r,"ap")), limit:curLayer.limit, attach:curLayer.attach,
+              share, line, prem, price, status:st, note:String(get(r,"note")??"").trim()});
   });
-  return finish(layers, unread);
+  return {raw, unread};
 }
 
-function finish(layerMap, unread){
-  const layers = [...layerMap.values()].sort((a,b)=>a.attach-b.attach);
-  layers.forEach(L => {
-    const live = L.lines.filter(x=>x.status!=='declined');
-    L.firm = live.filter(x=>x.status==='firm').reduce((s,x)=>s+x.share,0);
-    L.ind = live.filter(x=>x.status==='indication').reduce((s,x)=>s+x.share,0);
+function parseText(text){
+  const raw = [], unread = []; let cur = null, curLabel = "";
+  text.replace(/\r/g,"").split("\n").forEach((rawLine, i) => {
+    let line = rawLine.trim();
+    if(!line || /^[-=_*#\s]+$/.test(line)) return;
+    let notes = [], ap = "";
+    line = line.replace(/[([]([^)\]]*)[)\]]/g, (_, n) => { const a = normAP(n); if(n.trim() && (AP.includes(a) || /lloyd|act|gpf|facility/i.test(n)) && !ap) ap = a; else if(n.trim()) notes.push(n.trim()); return " "; });
+    const L = findLayer(line);
+    let rest = L ? line.replace(L.match," ") : line;
+    rest = rest.replace(/\bp\/o\b|\bpart\s+of\b/ig," ");
+    let share=null, prem=null, price=null, lineAmt=null;
+    const pm = rest.match(/(?:@|\bprice\b:?)\s*(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)/i);
+    if(pm){ price = money(pm[1]); rest = rest.replace(pm[0]," "); }
+    const prm = rest.match(/\bprem(?:ium)?\b:?\s*(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)/i) || rest.match(/(\$\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)\s*prem(?:ium)?\b/i);
+    if(prm){ prem = money(prm[1]); rest = rest.replace(prm[0]," "); }
+    const lm = rest.match(/(\$\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)\s*(?:line|capacity|cap)\b/i);
+    if(lm){ lineAmt = money(lm[1]); rest = rest.replace(lm[0]," "); }
+    const sm = rest.match(/([\d.]+)\s*%/);
+    if(sm){ share = parseFloat(sm[1]); rest = rest.replace(sm[0]," "); }
+    if(!ap){ const am = rest.match(/\b(london|lloyd'?s|bermuda|wholesale|direct|captive|act|gpf)\b/i); if(am){ ap = normAP(am[1]); rest = rest.replace(am[0]," "); } }
+    const st = statusOf(rest);
+    rest = rest.replace(/\b(ind|indication|indicative|tbc|subject|declined?|nil|no\s*quote|nq|firm|line|share|written|signed|on|of|at|for|layer\s*\d*)\b/ig," ");
+    const name = rest.replace(/[:;,|–—\-]+/g," ").replace(/\s+/g," ").trim();
+    if(L && share==null && prem==null && price==null && lineAmt==null && st==="firm"){ cur = L; curLabel = name; return; }
+    if(share==null && lineAmt==null && st!=="declined"){ unread.push({n:i+1, text:rawLine.trim()}); return; }
+    const T = L || cur;
+    if(!T){ unread.push({n:i+1, text:rawLine.trim(), why:"no layer above it"}); return; }
+    raw.push({row:i+1, market:name||"Unnamed market", ap, limit:T.limit, attach:T.attach, label: L?"":curLabel,
+              share, line:lineAmt, prem, price, status:st, note:notes.join("; ")});
+  });
+  return {raw, unread};
+}
+
+/* ================= Premium maths =================
+   share % = Share % column, or Line $ ÷ layer limit
+   Layer 100% premium = the 100% Layer Premium column if given,
+     otherwise Σ carrier premium ÷ Σ their share (carriers with both)
+   A carrier with a share but no premium = share × layer 100% premium (shown as calculated) */
+function build({raw, unread, problem}){
+  const layers = new Map();
+  raw.forEach(x => {
+    const k = x.attach+"|"+x.limit;
+    if(!layers.has(k)) layers.set(k, {attach:x.attach, limit:x.limit, label:"", lines:[]});
+    const L = layers.get(k);
+    if(x.label && !L.label) L.label = x.label;
+    let share = x.share;
+    if((share==null || isNaN(share)) && x.line) share = x.line / x.limit * 100;
+    const mk = mkey(x.market);
+    const ap = S.apSet[mk] || x.ap || "";
+    L.lines.push({...x, share: share||0, ap, prem: x.prem, premCalc:false});
+  });
+  const out = [...layers.values()].sort((a,b)=>a.attach-b.attach);
+  let calcCount = 0;
+  out.forEach(L => {
+    const live = L.lines.filter(l=>l.status!=="declined");
+    // 100% layer premium
+    const explicit = live.map(l=>l.price).filter(v=>v);
+    const withPrem = live.filter(l=>l.prem!=null && l.share>0);
+    const sp = withPrem.reduce((s,l)=>s+l.share,0);
+    if(withPrem.length && sp>0){ L.price100 = withPrem.reduce((s,l)=>s+l.prem,0) / (sp/100); L.priceBasis = `from ${withPrem.length} carrier${withPrem.length>1?"s'":"'s"} premium`; }
+    else if(explicit.length){ L.price100 = median(explicit); L.priceBasis = "from the 100% layer premium"; }
+    else { L.price100 = null; L.priceBasis = ""; }
+    // fill missing carrier premiums
+    live.forEach(l => {
+      if(l.prem==null){
+        const base = l.price || L.price100;
+        if(base!=null && l.share>0){ l.prem = base * l.share/100; l.premCalc = true; calcCount++; }
+      }
+    });
+    L.firm = live.filter(l=>l.status==="firm").reduce((s,l)=>s+l.share,0);
+    L.ind = live.filter(l=>l.status==="indication").reduce((s,l)=>s+l.share,0);
     L.placed = L.firm + L.ind;
-    L.prem = live.reduce((s,x)=>s+(x.prem||0),0);
-    L.missingPrem = live.some(x=>x.prem==null);
-    L.rol = L.placed ? (L.prem/(L.placed/100))/L.limit*100 : null;
+    L.prem = live.reduce((s,l)=>s+(l.prem||0),0);
+    L.missingPrem = live.filter(l=>l.prem==null).length;
+    L.rol = L.price100 ? L.price100/L.limit*100 : null;
   });
-  return {layers, unread};
+  return {layers: out, unread, problem, calc: calcCount};
+}
+const median = a => { const s=[...a].sort((x,y)=>x-y); const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
+function mkey(n){ return String(n).toLowerCase().replace(/\b(insurance|ins|syndicate|syn|ltd|limited|plc|inc|co|company|group|re|reinsurance|uk|us|au|australia|se|ag|sa)\b/g,"").replace(/[^a-z0-9]/g,"") || String(n).toLowerCase(); }
+
+function rebuild(){
+  if(S.tab==="text") S.data = build(parseText($("#src").value));
+  else S.data = S.rows.length ? build(parseTable()) : {layers:[], unread:[], calc:0};
+  render();
 }
 
-/* ---------- Colours ---------- */
-const PAL_L = ['#3d6fd9','#2f9c8f','#c27a1d','#8a5cc7','#c2496b','#4c8f3a','#2b8bb8','#a8642e','#6b6fd1','#b14f9f','#5d8a8a','#9a8a2a'];
-const PAL_D = ['#5f8ff0','#3fbcad','#e09a3c','#a982e6','#e06c8c','#6fb35a','#4cacd8','#c9844d','#8c8ff0','#d273c0','#7fb0b0','#c4b345'];
-const colourIndex = new Map();
-function marketKey(n){ return n.toLowerCase().replace(/\b(insurance|ins|syndicate|syn|ltd|limited|plc|inc|co|company|group|re|reinsurance|uk|us|au|australia)\b/g,'').replace(/[^a-z0-9]/g,'') || n.toLowerCase() }
-function colour(name, dark){
-  const k = marketKey(name);
-  if(!colourIndex.has(k)) colourIndex.set(k, colourIndex.size);
-  const pal = dark?PAL_D:PAL_L; return pal[colourIndex.get(k)%pal.length];
+/* ================= Colours ================= */
+function apList(){
+  const seen = new Set();
+  S.data.layers.forEach(L=>L.lines.forEach(l=>{ if(l.status!=="declined") seen.add(l.ap||NONE) }));
+  const base = AP.filter(a=>seen.has(a));
+  const extra = [...seen].filter(a=>!AP.includes(a) && a!==NONE).sort();
+  return [...base, ...extra, ...(seen.has(NONE)?[NONE]:[])];
 }
-function isDark(){
-  const t = document.documentElement.getAttribute('data-theme');
-  return t ? t==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+function apColour(ap){
+  const d = isDark(); const a = ap || NONE;
+  if(S.apCol[a]) return S.apCol[a];
+  if(a===NONE) return d ? NONE_D : NONE_L;
+  if(AP.includes(a)) return (d?AP_COL_D:AP_COL_L)[a];
+  const extras = apList().filter(x=>!AP.includes(x) && x!==NONE);
+  const i = Math.max(0, extras.indexOf(a));
+  return (d?EXTRA_D:EXTRA_L)[i % EXTRA_L.length];
 }
-function cssv(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() }
+const mktIndex = new Map();
+function mktColour(name){
+  const k = mkey(name); if(!mktIndex.has(k)) mktIndex.set(k, mktIndex.size);
+  return (isDark()?MKT_D:MKT_L)[mktIndex.get(k) % MKT_L.length];
+}
+const colourOf = l => S.colby==="mkt" ? mktColour(l.market) : apColour(l.ap);
+function hex2rgb(h){ h=h.replace("#",""); if(h.length===3) h=h.split("").map(c=>c+c).join(""); const n=parseInt(h,16); return [n>>16&255,n>>8&255,n&255]; }
+function mix(a, b, t){ const A=hex2rgb(a), B=hex2rgb(b); return "#"+A.map((v,i)=>Math.round(v*t+B[i]*(1-t)).toString(16).padStart(2,"0")).join(""); }
+function toHex(c){ if(c.startsWith("#")) return c; const m=c.match(/\d+/g); return m ? "#"+m.slice(0,3).map(v=>(+v).toString(16).padStart(2,"0")).join("") : "#ffffff"; }
 
-/* ---------- Text fitting (never cut mid-word) ---------- */
-const mctx = document.createElement('canvas').getContext('2d');
-function tw(s, size, weight){ mctx.font = `${weight||400} ${size}px Inter, system-ui, sans-serif`; return mctx.measureText(s).width }
+/* ================= Text fitting (never cut mid-word) ================= */
+const mctx = document.createElement("canvas").getContext("2d");
+const FONT = '"Helvetica Now Text","Helvetica Neue",Helvetica,Arial,sans-serif';
+function tw(s, size, weight){ mctx.font = `${weight||400} ${size}px ${FONT}`; return mctx.measureText(s).width }
 function fitName(name, w, size){
-  const cands = [name];
-  const words = name.split(' ');
-  for(let k=words.length-1;k>=1;k--) cands.push(words.slice(0,k).join(' '));
-  cands.push(words.map(x=>x[0]).join('').toUpperCase());
-  for(const c of cands) if(tw(c,size,600) <= w) return c;
+  const words = name.split(" "), c = [name];
+  for(let k=words.length-1;k>=1;k--) c.push(words.slice(0,k).join(" "));
+  if(words.length>1) c.push(words.map(x=>x[0]).join("").toUpperCase());
+  for(const x of c) if(tw(x,size,700) <= w) return x;
   return null;
 }
 
-/* ---------- State ---------- */
-let state = { scale: store.get('scale','uniform'), lbl: store.get('lbl','share'), data: {layers:[],unread:[]} };
-function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) }
-
-/* ---------- Render ---------- */
+/* ================= Render ================= */
 function render(){
-  const {layers, unread} = state.data;
-  const title = $('#title').value.trim();
-  $('#progTitle').textContent = title || 'Program Schematic';
-  document.title = title ? title+' – Schematic' : 'Schematic Builder';
-  document.querySelectorAll('[data-scale]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.scale===state.scale));
-  document.querySelectorAll('[data-lbl]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.lbl===state.lbl));
+  const {layers, unread, problem, calc} = S.data;
+  const title = $("#title").value.trim();
+  $("#progTitle").textContent = title || "Program Schematic";
+  document.title = title ? title+" – Schematic" : "Schematic Builder";
+  $$("[data-colby]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.colby===S.colby));
+  $$("[data-scale]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.scale===S.scale));
+  $$("[data-lbl]").forEach(b=>b.setAttribute("aria-pressed", b.dataset.lbl===S.lbl));
+  $$("[data-tab]").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===S.tab));
+  $$("[data-pane]").forEach(p=>p.hidden = p.dataset.pane!==S.tab);
 
   if(!layers.length){
-    $('#kpis').innerHTML=''; $('#issues').innerHTML = unread.length? issuesHtml(layers,unread):'';
-    $('#schem').innerHTML = '<div class="empty">Paste a schedule on the left, or click Load Sample.</div>';
-    $('#table').innerHTML=''; return;
+    $("#kpis").innerHTML = ""; $("#legend").innerHTML = ""; $("#legendHint").hidden = true;
+    $("#issues").innerHTML = problem ? `<div class="issue"><span class="chip bad">Needed</span>${esc(problem)}</div>` : unreadHtml(unread);
+    $("#progSub").textContent = "Nothing loaded yet";
+    $("#schem").innerHTML = `<div class="empty">Upload or paste a schedule to build the schematic.</div>`;
+    $("#table").innerHTML = `<div class="empty" style="border:0">No data yet.</div>`;
+    return;
   }
   const top = Math.max(...layers.map(L=>L.attach+L.limit));
   const prem = layers.reduce((s,L)=>s+L.prem,0);
-  const markets = new Set(layers.flatMap(L=>L.lines.filter(x=>x.status!=='declined').map(x=>marketKey(x.market))));
+  const mk = new Set(layers.flatMap(L=>L.lines.filter(x=>x.status!=="declined").map(x=>mkey(x.market))));
   const open = layers.filter(L=>L.placed < 99.995);
-  $('#kpis').innerHTML = [
-    ['Program Limit', fmtM(top)], ['Layers', layers.length], ['Markets', markets.size],
-    ['Total Premium', fmt$(prem)], ['Fully Placed', open.length? `No · ${open.length} open` : 'Yes']
-  ].map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
-  $('#issues').innerHTML = issuesHtml(layers, unread);
-  $('#schem').innerHTML = svg(layers, top);
+  const price100 = layers.every(L=>L.price100) ? layers.reduce((s,L)=>s+L.price100,0) : null;
+  $("#progSub").textContent = `${layers.length} layer${layers.length>1?"s":""} · ${mk.size} markets · ${fmtM(top)} program limit`;
+  $("#kpis").innerHTML = [
+    ["Program Limit", fmtM(top)],
+    ["Premium (placed)", fmt$(prem)],
+    ["100% Premium", price100 ? fmt$(price100) : "–"],
+    ["Markets", mk.size],
+    ["Fully Placed", open.length ? `No · ${open.length} open` : "Yes"]
+  ].map(([l,v])=>`<div class="kpi"><span class="l">${l}</span><span class="v">${v}</span></div>`).join("");
+  $("#issues").innerHTML = issuesHtml(layers, unread, calc);
+  $("#schem").innerHTML = svg(layers, top);
   bindTips();
-  $('#table').innerHTML = tableHtml(layers);
+  renderLegend();
+  $("#table").innerHTML = tableHtml(layers);
+  $$(".apsel").forEach(s => s.onchange = () => {
+    const k = s.dataset.mk; if(s.value==="__new"){ const v = prompt("New access point name (e.g. an MGA or regional office):"); if(!v){ s.value=""; return } S.apSet[k]=normAP(v); }
+    else if(s.value) S.apSet[k] = s.value; else delete S.apSet[k];
+    store.set("apSet", S.apSet); rebuild();
+  });
 }
 
-function issuesHtml(layers, unread){
+function unreadHtml(unread){
+  return unread.slice(0,8).map(u=>`<div class="issue"><span class="chip warn">Row ${u.n} skipped</span>${esc(String(u.text).slice(0,80))}${u.why?` <span class="muted">– ${esc(u.why)}</span>`:""}</div>`).join("")
+    + (unread.length>8 ? `<div class="issue muted">…and ${unread.length-8} more rows skipped</div>` : "");
+}
+function issuesHtml(layers, unread, calc){
   const out = [];
   layers.forEach(L=>{
     const gap = 100 - L.placed;
-    if(gap > 0.005) out.push(`<div class="issue bad"><b>${fmtPct(gap)} open</b> on ${layerName(L)} (${fmtM(L.limit*gap/100)} of limit)</div>`);
-    if(gap < -0.005) out.push(`<div class="issue bad"><b>Overplaced ${fmtPct(L.placed)}</b> on ${layerName(L)}</div>`);
-    if(L.ind > 0) out.push(`<div class="issue warn"><b>${fmtPct(L.ind)} indication only</b> on ${layerName(L)}</div>`);
-    if(L.missingPrem) out.push(`<div class="issue warn"><b>Premium missing</b> for a line on ${layerName(L)}; totals exclude it</div>`);
+    if(gap > 0.005) out.push(`<div class="issue"><span class="chip bad">${fmtPct(gap)} open</span>${layerName(L)} – ${fmtM(L.limit*gap/100)} of limit unplaced</div>`);
+    if(gap < -0.005) out.push(`<div class="issue"><span class="chip bad">Overplaced ${fmtPct(L.placed)}</span>${layerName(L)}</div>`);
+    if(L.ind > 0) out.push(`<div class="issue"><span class="chip warn">${fmtPct(L.ind)} indication</span>${layerName(L)} – not firm</div>`);
+    if(L.missingPrem) out.push(`<div class="issue"><span class="chip warn">No premium</span>${layerName(L)} – ${L.missingPrem} line${L.missingPrem>1?"s have":" has"} no premium and nothing to calculate it from</div>`);
   });
   for(let i=1;i<layers.length;i++){
     const a=layers[i-1], b=layers[i], end=a.attach+a.limit;
-    if(b.attach > end) out.push(`<div class="issue bad"><b>Gap in tower</b> between ${fmtM(end)} and ${fmtM(b.attach)}</div>`);
-    if(b.attach < end) out.push(`<div class="issue warn"><b>Overlapping layers</b>: ${layerName(a)} and ${layerName(b)}</div>`);
+    if(b.attach > end) out.push(`<div class="issue"><span class="chip bad">Gap in tower</span>between ${fmtM(end)} and ${fmtM(b.attach)}</div>`);
+    if(b.attach < end) out.push(`<div class="issue"><span class="chip warn">Overlap</span>${layerName(a)} and ${layerName(b)}</div>`);
   }
-  unread.forEach(u=>out.push(`<div class="issue warn"><b>Line ${u.n} not read</b>${u.why?' ('+u.why+')':''}: ${esc(u.text.slice(0,90))}</div>`));
-  if(!out.length && layers.length) out.push(`<div class="issue good"><b>Every layer is 100% placed.</b></div>`);
-  return out.join('');
+  if(calc) out.push(`<div class="issue"><span class="chip info">${calc} calculated</span>Premium worked out from share × the layer's 100% premium</div>`);
+  if(!out.some(x=>x.includes("chip bad")) && layers.length) out.unshift(`<div class="issue"><span class="chip ok">Fully placed</span>Every layer is at 100%</div>`);
+  return out.join("") + unreadHtml(unread);
 }
 
 function svg(layers, top){
   const dark = isDark();
-  const C = { text:cssv('--text'), muted:cssv('--muted'), border:cssv('--border'), surface:cssv('--surface'), open:cssv('--open'), hatch:cssv('--hatch-bg'), warn:cssv('--warn') };
-  const W = Math.max(560, Math.min($('#schem').clientWidth-28, 1600));
-  const axisW = 70, sideW = 150, plotX = axisW, plotW = W - axisW - sideW - 12;
-  const minH = 64, uniH = 96;
-  // Readable: when a layer has many narrow lines, it gets extra rows (wraps) instead of clipping.
-  const heights = layers.map(L=>{
-    if(state.scale==='uniform') return uniH;
-    const h = (L.limit/top) * Math.max(380, layers.length*110);
-    return Math.max(minH, h);
-  });
-  const H = heights.reduce((a,b)=>a+b,0);
-  const padT = 10, padB = 34;
-  const total = H + padT + padB;
+  const C = { ink:toHex(cssv("--ink")), muted:toHex(cssv("--muted")), line:toHex(cssv("--line")), surface:toHex(cssv("--surface")),
+              bad:toHex(cssv("--bad")), badbg:toHex(cssv("--bad-bg")), navy:toHex(cssv("--navy")), sub:toHex(cssv("--sb-sub")) };
+  const W = Math.max(600, Math.min($("#schem").clientWidth, 1600));
+  const axisW = 110, sideW = 150, plotX = axisW, plotW = W - axisW - sideW - 12;
+  const uniH = 92, minH = 58;
+  const heights = layers.map(L => S.scale==="uniform" ? uniH : Math.max(minH, (L.limit/top) * Math.max(380, layers.length*105)));
+  const H = heights.reduce((a,b)=>a+b,0), padT = 6, padB = 30, total = H + padT + padB;
+  const P = [];
+  P.push(`<defs><pattern id="gap" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="${C.badbg}"/><line x1="0" y1="0" x2="0" y2="7" stroke="${C.bad}" stroke-width="1.6" opacity=".35"/></pattern></defs>`);
+  P.push(`<rect width="${W}" height="${total}" fill="${C.surface}"/>`);
   let y = padT + H;
-  const parts = [];
-  parts.push(`<defs><pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="${C.hatch}"/><line x1="0" y1="0" x2="0" y2="8" stroke="${C.open}" stroke-width="2" opacity=".45"/></pattern>
-    <pattern id="indp" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><rect width="6" height="6" fill="none"/><line x1="0" y1="0" x2="0" y2="6" stroke="#fff" stroke-width="1.5" opacity=".35"/></pattern></defs>`);
-  parts.push(`<rect x="0" y="0" width="${W}" height="${total}" fill="${C.surface}"/>`);
   layers.forEach((L, li) => {
-    const h = heights[li]; const y0 = y - h;
-    // axis label at bottom of layer
-    parts.push(`<text x="${axisW-10}" y="${y+4}" text-anchor="end" font-size="11" fill="${C.muted}">${fmtM(L.attach)}</text>`);
-    parts.push(`<line x1="${axisW-5}" x2="${plotX+plotW}" y1="${y}" y2="${y}" stroke="${C.border}"/>`);
+    const h = heights[li], y0 = y - h;
+    // left: layer name, attachment
+    const yl = [[layerName(L), 12, 700, C.navy]];
+    if(L.label && h>=64) yl.unshift([L.label, 11, 400, C.muted]);
+    let ty = y0 + h/2 - (yl.length-1)*7 + 4;
+    yl.forEach(([t,s,w,c]) => { let txt=t; while(tw(txt,s,w)>axisW-14 && txt.includes(" ")) txt=txt.split(" ").slice(0,-1).join(" "); P.push(`<text x="${axisW-10}" y="${ty}" text-anchor="end" font-size="${s}" font-weight="${w}" fill="${c}">${esc(txt)}</text>`); ty+=14; });
+    P.push(`<line x1="${plotX}" x2="${plotX+plotW}" y1="${y}" y2="${y}" stroke="${C.line}"/>`);
     let x = plotX;
-    const live = L.lines.filter(l=>l.status!=='declined');
-    const scaleW = Math.max(100, L.placed) ; // overplaced layers squeeze to fit
+    const live = L.lines.filter(l=>l.status!=="declined");
+    const scaleW = Math.max(100, L.placed);
     live.forEach(ln => {
       const w = plotW * ln.share/scaleW;
-      const col = colour(ln.market, dark);
-      const tip = esc(`${ln.market} · ${fmtPct(ln.share,4)}${ln.status==='indication'?' (indication)':''}\n${layerName(L)}\nLine ${fmtM(L.limit*ln.share/100)} · Premium ${fmt$(ln.prem)}${ln.price100?'\n100% price '+fmt$(ln.price100):''}${ln.note?'\n'+ln.note:''}`);
-      parts.push(`<g data-tip="${tip}"><rect x="${x+0.5}" y="${y0+1}" width="${Math.max(0,w-1)}" height="${h-2}" rx="3" fill="${col}" ${ln.status==='indication'?'opacity=".55"':''}/>`);
-      if(ln.status==='indication') parts.push(`<rect x="${x+0.5}" y="${y0+1}" width="${Math.max(0,w-1)}" height="${h-2}" rx="3" fill="url(#indp)"/>`);
-      // labels: name, then value. Drop lines that don't fit; never truncate mid-word.
-      const inner = w - 10; const cx = x + w/2;
-      const val = state.lbl==='prem' ? fmtM(ln.prem) : state.lbl==='line' ? fmtM(L.limit*ln.share/100) : fmtPct(ln.share);
-      const nameFit = inner>14 ? fitName(ln.market, inner, 11.5) : null;
-      const valFit = tw(val,11,500) <= inner;
+      const g = colourOf(ln);
+      const fill = mix(g, C.surface, ln.status==="indication" ? .12 : .24);
+      const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}\nLine ${fmtM(L.limit*ln.share/100)} · Premium ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
+      const bx = x+1, by = y0+1, bw = Math.max(0, w-2), bh = h-2;
+      P.push(`<g data-tip="${esc(tip)}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="${fill}"/>`);
+      if(ln.status==="indication") P.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="none" stroke="${g}" stroke-dasharray="3 2"/>`);
+      if(bw>3) P.push(`<rect x="${bx}" y="${by}" width="3" height="${bh}" fill="${g}"/>`);
+      const inner = bw - 10, cx = bx + 1.5 + bw/2;
+      const val = S.lbl==="prem" ? (ln.prem!=null ? fmtM(ln.prem) : "–") : S.lbl==="line" ? fmtM(L.limit*ln.share/100) : fmtPct(ln.share);
+      const nameFit = inner>12 ? fitName(ln.market, inner, 11) : null;
       const lines = [];
-      if(nameFit && h>=34) lines.push([nameFit, 11.5, 600]);
-      if(valFit) lines.push([val, 11, 500]);
-      if(ln.status==='indication' && h>=60 && tw('Ind.',10,500)<=inner) lines.push(['Ind.',10,500]);
-      const lh = 14; let ty = y0 + h/2 - (lines.length-1)*lh/2 + 4;
-      lines.forEach(([t,s,wt])=>{ parts.push(`<text x="${cx}" y="${ty}" text-anchor="middle" font-size="${s}" font-weight="${wt}" fill="#fff">${esc(t)}</text>`); ty+=lh; });
-      parts.push(`</g>`);
+      if(nameFit && h>=34) lines.push([nameFit, 11, 700, C.ink]);
+      if(tw(val,11,400) <= inner) lines.push([val, 11, 400, C.sub]);
+      if(ln.status==="indication" && h>=58 && tw("Indication",10,400)<=inner) lines.push(["Indication",10,400,C.muted]);
+      let yy = y0 + h/2 - (lines.length-1)*7 + 4;
+      lines.forEach(([t,s,wt,c]) => { P.push(`<text x="${cx}" y="${yy}" text-anchor="middle" font-size="${s}" font-weight="${wt}" fill="${c}">${esc(t)}</text>`); yy+=14; });
+      P.push(`</g>`);
       x += w;
     });
     if(L.placed < 99.995){
-      const w = plotW * (100-L.placed)/100;
-      parts.push(`<g data-tip="${esc(fmtPct(100-L.placed)+' open on '+layerName(L)+'\n'+fmtM(L.limit*(100-L.placed)/100)+' of limit unplaced')}"><rect x="${x+0.5}" y="${y0+1}" width="${Math.max(0,w-1)}" height="${h-2}" rx="3" fill="url(#hatch)" stroke="${C.open}" stroke-dasharray="4 3"/>`);
-      const t = fmtPct(100-L.placed)+' open';
-      if(tw(t,11.5,600) <= w-10) parts.push(`<text x="${x+w/2}" y="${y0+h/2+4}" text-anchor="middle" font-size="11.5" font-weight="600" fill="${C.open}">${t}</text>`);
-      else if(tw(fmtPct(100-L.placed),11,600) <= w-6) parts.push(`<text x="${x+w/2}" y="${y0+h/2+4}" text-anchor="middle" font-size="11" font-weight="600" fill="${C.open}">${fmtPct(100-L.placed)}</text>`);
-      parts.push(`</g>`);
+      const w = plotW*(100-L.placed)/100, t = fmtPct(100-L.placed)+" open";
+      P.push(`<g data-tip="${esc(fmtPct(100-L.placed)+" open on "+layerName(L)+"\n"+fmtM(L.limit*(100-L.placed)/100)+" of limit unplaced")}"><rect x="${x+1}" y="${y0+1}" width="${Math.max(0,w-2)}" height="${h-2}" rx="3" fill="url(#gap)"/>`);
+      if(tw(t,11,700) <= w-10) P.push(`<text x="${x+w/2}" y="${y0+h/2+4}" text-anchor="middle" font-size="11" font-weight="700" fill="${C.bad}">${t}</text>`);
+      else if(tw(fmtPct(100-L.placed),11,700) <= w-6) P.push(`<text x="${x+w/2}" y="${y0+h/2+4}" text-anchor="middle" font-size="11" font-weight="700" fill="${C.bad}">${fmtPct(100-L.placed)}</text>`);
+      P.push(`</g>`);
     }
-    if(L.placed > 100.005) parts.push(`<rect x="${plotX}" y="${y0+1}" width="${plotW}" height="${h-2}" fill="none" stroke="${C.open}" stroke-width="2" rx="3"/>`);
-    // side summary
+    if(L.placed > 100.005) P.push(`<rect x="${plotX}" y="${y0+1}" width="${plotW}" height="${h-2}" fill="none" stroke="${C.bad}" stroke-width="2" rx="3"/>`);
+    // right: premium summary
     const sx = plotX + plotW + 14;
-    const sLines = [[layerName(L) + (L.label?'':''), 12, 600, C.text], [fmt$(L.prem)+(L.missingPrem?' *':''), 11.5, 500, C.text], [fmtPct(L.placed)+' placed'+(L.rol?` · ROL ${fmtPct(L.rol)}`:''), 11, 400, L.placed<99.995||L.placed>100.005?C.open:C.muted]];
-    if(L.label && h>=70) sLines.unshift([L.label, 11, 500, C.muted]);
-    let sy = y0 + h/2 - (sLines.length-1)*7 + 4;
-    sLines.forEach(([t,s,wt,c])=>{ let txt=t; while(tw(txt,s,wt)>sideW-4 && txt.includes(' ')) txt=txt.split(' ').slice(0,-1).join(' '); parts.push(`<text x="${sx}" y="${sy}" font-size="${s}" font-weight="${wt}" fill="${c}">${esc(txt)}</text>`); sy+=14; });
+    const sl = [[fmt$(L.prem), 12, 700, C.navy], [fmtPct(L.placed)+" placed", 11, 400, (L.placed<99.995||L.placed>100.005)?C.bad:C.muted]];
+    if(L.rol && h>=56) sl.push([`ROL ${fmtPct(L.rol)}`, 11, 400, C.muted]);
+    let sy = y0 + h/2 - (sl.length-1)*7 + 4;
+    sl.forEach(([t,s,w,c]) => { P.push(`<text x="${sx}" y="${sy}" font-size="${s}" font-weight="${w}" fill="${c}">${esc(t)}</text>`); sy+=14; });
     y = y0;
   });
-  parts.push(`<text x="${axisW-10}" y="${y+4}" text-anchor="end" font-size="11" font-weight="600" fill="${C.text}">${fmtM(top)}</text>`);
-  parts.push(`<line x1="${axisW-5}" x2="${plotX+plotW}" y1="${y}" y2="${y}" stroke="${C.border}"/>`);
-  const ttl = $('#title').value.trim();
-  parts.push(`<text x="${plotX}" y="${total-12}" font-size="11" fill="${C.muted}">${esc(ttl?ttl+' · ':'')}Total premium ${fmt$(layers.reduce((s,L)=>s+L.prem,0))} · ${state.scale==='uniform'?'Layers drawn at equal height':'Layer height to scale (minimum height for legibility)'}</text>`);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${total}" width="${W}" height="${total}" font-family="Inter, system-ui, sans-serif">${parts.join('')}</svg>`;
+  P.push(`<line x1="${plotX}" x2="${plotX}" y1="${padT}" y2="${padT+H}" stroke="${C.line}"/>`);
+  P.push(`<text x="${axisW-10}" y="${padT+10}" text-anchor="end" font-size="11" fill="${C.muted}">${fmtM(top)}</text>`);
+  const ttl = $("#title").value.trim();
+  P.push(`<text x="${plotX}" y="${total-10}" font-size="11" fill="${C.muted}">${esc(ttl?ttl+" · ":"")}Premium ${fmt$(layers.reduce((s,L)=>s+L.prem,0))} · ${S.scale==="uniform"?"Layers at equal height":"Layer height to scale"}</text>`);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${total}" width="${W}" height="${total}" font-family='${FONT}'>${P.join("")}</svg>`;
+}
+
+function renderLegend(){
+  const el = $("#legend");
+  if(S.colby==="mkt"){
+    const seen = new Map();
+    S.data.layers.forEach(L=>L.lines.forEach(l=>{ if(l.status!=="declined" && !seen.has(mkey(l.market))) seen.set(mkey(l.market), l.market) }));
+    el.innerHTML = [...seen.values()].map(n=>`<li><span class="sw" style="background:${mktColour(n)}"></span>${esc(n)}</li>`).join("");
+    $("#legendHint").hidden = true; return;
+  }
+  const counts = {};
+  S.data.layers.forEach(L=>L.lines.forEach(l=>{ if(l.status!=="declined"){ const a=l.ap||NONE; counts[a]=(counts[a]||0)+1 } }));
+  el.innerHTML = apList().map(a=>`<li><span class="sw edit" style="background:${apColour(a)}" title="Change colour"><input type="color" value="${apColour(a)}" data-apc="${esc(a)}" aria-label="Colour for ${esc(a)}"></span>${esc(a)} <span class="muted">(${counts[a]||0})</span></li>`).join("")
+    + (Object.keys(S.apCol).length ? `<li><button class="btn ghost sm noprint" id="resetCols" style="margin:0">Reset colours</button></li>` : "");
+  $("#legendHint").hidden = false;
+  $$("[data-apc]").forEach(i => i.oninput = () => { S.apCol[i.dataset.apc] = i.value; store.set("apCol", S.apCol); render(); });
+  const rc = $("#resetCols"); if(rc) rc.onclick = () => { S.apCol = {}; store.set("apCol", {}); render(); };
 }
 
 function tableHtml(layers){
-  const dark = isDark();
-  let h = `<table><thead><tr><th>Layer / Market</th><th class="n">Share</th><th class="n">Line</th><th class="n">Premium</th><th class="n">100% Price</th><th class="n">ROL</th><th>Status</th><th>Notes</th></tr></thead><tbody>`;
+  const aps = [...new Set([...AP, ...apList().filter(a=>a!==NONE)])];
+  let h = `<table class="grid"><thead><tr><th>Layer / Market</th><th>Access Point</th><th class="r">Share</th><th class="r">Line</th><th class="r">Premium</th><th class="r">100% Premium</th><th>Status</th><th>Notes</th></tr></thead><tbody>`;
   [...layers].reverse().forEach(L=>{
-    h += `<tr class="layer"><td>${layerName(L)}${L.label?' · '+esc(L.label):''}</td><td class="n">${fmtPct(L.placed)}</td><td class="n">${fmtM(L.limit*L.placed/100)}</td><td class="n">${fmt$(L.prem)}</td><td class="n">${L.placed?fmt$(L.prem/(L.placed/100)):'–'}</td><td class="n">${fmtPct(L.rol)}</td><td>${L.placed<99.995?'Open':L.placed>100.005?'Overplaced':'Placed'}</td><td></td></tr>`;
+    h += `<tr class="lh"><td>${layerName(L)}${L.label?" · "+esc(L.label):""}</td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmtM(L.limit*L.placed/100)}</td><td class="r">${fmt$(L.prem)}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${L.placed<99.995?"Open":L.placed>100.005?"Overplaced":"Placed"}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td></tr>`;
     L.lines.forEach(x=>{
-      h += `<tr><td><span class="sw" style="background:${x.status==='declined'?'transparent;border:1px solid '+cssv('--border'):colour(x.market,dark)}"></span>${esc(x.market)}</td><td class="n">${x.status==='declined'?'–':fmtPct(x.share,4)}</td><td class="n">${x.status==='declined'?'–':fmtM(L.limit*x.share/100)}</td><td class="n">${fmt$(x.prem)}</td><td class="n">${fmt$(x.price100)}</td><td class="n">${x.price100?fmtPct(x.price100/L.limit*100):'–'}</td><td>${x.status==='firm'?'Firm':x.status==='indication'?'Indication':'Declined'}</td><td>${esc(x.note||'')}</td></tr>`;
+      const k = mkey(x.market), dec = x.status==="declined";
+      const sw = dec ? `<span class="sw" style="border:1px solid var(--line)"></span>` : `<span class="sw" style="background:${colourOf(x)}"></span>`;
+      h += `<tr><td><span style="display:inline-flex;align-items:center;gap:8px">${sw}${esc(x.market)}</span></td>
+        <td><select class="apsel noprint${x.ap?"":" none"}" data-mk="${esc(k)}"><option value="">${NONE}</option>${aps.map(a=>`<option${a===x.ap?" selected":""}>${esc(a)}</option>`).join("")}<option value="__new">+ Add access point…</option></select></td>
+        <td class="r">${dec?"–":fmtPct(x.share,4)}</td><td class="r">${dec?"–":fmtM(L.limit*x.share/100)}</td>
+        <td class="r${x.premCalc?" calc":""}">${dec?"–":fmt$(x.prem)}</td><td class="r">${x.prem!=null&&x.share?fmt$(x.prem/(x.share/100)):"–"}</td>
+        <td>${x.status==="firm"?"Firm":x.status==="indication"?"Indication":"Declined"}</td><td>${esc(x.note||"")}</td></tr>`;
     });
   });
-  return h + '</tbody></table>';
+  return h + `</tbody></table>`;
 }
 
-/* ---------- Tooltips ---------- */
+/* ================= Tooltips ================= */
 function bindTips(){
-  const tip = $('#tip');
-  $('#schem').querySelectorAll('[data-tip]').forEach(g=>{
-    g.addEventListener('mousemove', e=>{ tip.style.display='block'; tip.innerText=g.dataset.tip; tip.style.left=Math.min(e.clientX+12, innerWidth-290)+'px'; tip.style.top=(e.clientY+14)+'px'; });
-    g.addEventListener('mouseleave', ()=>tip.style.display='none');
+  const tip = $("#tip");
+  $$("#schem [data-tip]").forEach(g=>{
+    g.addEventListener("mousemove", e=>{ tip.style.display="block"; tip.textContent=g.dataset.tip; tip.style.left=Math.min(e.clientX+12, innerWidth-310)+"px"; tip.style.top=(e.clientY+14)+"px"; });
+    g.addEventListener("mouseleave", ()=>tip.style.display="none");
   });
 }
 
-/* ---------- Export ---------- */
-function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1800) }
+/* ================= Export ================= */
+function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove("on"),2200) }
 function pngBlob(){
   return new Promise((res,rej)=>{
-    const el = $('#schem svg'); if(!el) return rej('No schematic yet');
-    const w = +el.getAttribute('width'), h = +el.getAttribute('height');
-    const img = new Image();
-    img.onload = ()=>{ const c=document.createElement('canvas'); c.width=w*2; c.height=h*2; const x=c.getContext('2d'); x.scale(2,2); x.drawImage(img,0,0); c.toBlob(res,'image/png') };
+    const el = $("#schem svg"); if(!el) return rej("none");
+    const w = +el.getAttribute("width"), h = +el.getAttribute("height"), img = new Image();
+    img.onload = ()=>{ const c=document.createElement("canvas"); c.width=w*2; c.height=h*2; const x=c.getContext("2d"); x.scale(2,2); x.drawImage(img,0,0); c.toBlob(res,"image/png") };
     img.onerror = rej;
-    img.src = 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(el.outerHTML);
+    img.src = "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(el.outerHTML);
   });
 }
-$('#copyPng').onclick = async ()=>{
-  try{ const b = await pngBlob(); await navigator.clipboard.write([new ClipboardItem({'image/png':b})]); toast('Schematic copied as an image') }
-  catch(e){ toast('Copy failed – use Download PNG instead') }
-};
-$('#dlPng').onclick = async ()=>{
-  try{ const b = await pngBlob(); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=(($('#title').value.trim()||'schematic').replace(/[^\w\- ]+/g,''))+'.png'; a.click(); }
-  catch(e){ toast('Nothing to download yet') }
-};
-$('#print').onclick = ()=>print();
-$('#copyTsv').onclick = async ()=>{
-  const rows=[['Layer','Market','Share %','Line','Premium','100% Price','Status','Notes']];
-  state.data.layers.forEach(L=>L.lines.forEach(x=>rows.push([layerName(L),x.market,x.share,Math.round(L.limit*x.share/100),x.prem==null?'':Math.round(x.prem),x.price100==null?'':Math.round(x.price100),x.status,x.note||''])));
-  try{ await navigator.clipboard.writeText(rows.map(r=>r.join('\t')).join('\n')); toast('Copied – paste into Excel') }catch(e){ toast('Copy failed') }
+$("#copyPng").onclick = async ()=>{ try{ const b=await pngBlob(); await navigator.clipboard.write([new ClipboardItem({"image/png":b})]); toast("Schematic copied as an image") }catch(e){ toast("Copy didn't work – use Download PNG") } };
+$("#dlPng").onclick = async ()=>{ try{ const b=await pngBlob(); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=(($("#title").value.trim()||"schematic").replace(/[^\w\- ]+/g,""))+".png"; a.click(); }catch(e){ toast("Nothing to download yet") } };
+$("#print").onclick = ()=>print();
+$("#copyTsv").onclick = async ()=>{
+  const rows=[["Layer","Market","Access point","Share %","Line","Premium","Premium calculated","100% premium","Status","Notes"]];
+  S.data.layers.forEach(L=>L.lines.forEach(x=>rows.push([layerName(L),x.market,x.ap||"",x.share,Math.round(L.limit*x.share/100),x.prem==null?"":Math.round(x.prem),x.premCalc?"Yes":"",x.prem!=null&&x.share?Math.round(x.prem/(x.share/100)):"",x.status,x.note||""])));
+  try{ await navigator.clipboard.writeText(rows.map(r=>r.join("\t")).join("\n")); toast("Copied – paste into Excel") }catch(e){ toast("Copy didn't work") }
 };
 
-/* ---------- Wiring ---------- */
-const SAMPLE = `$25M xs $75M  Top layer
-Westfield Specialty 20% ind @ $310k
-Everest 25% @ $300k
-Fenwick Re 30% @ $290k (only with the $50M xs $25M)
+/* ================= Samples ================= */
+const SAMPLE_TBL = [
+  ["Layer","Carrier","Access Point","Share %","Premium","Status","Comments"],
+  ["$25M xs $75M","Westfield Specialty","Wholesale","20%","","Indication",""],
+  ["","Everest","Bermuda","25%","$300,000","Firm",""],
+  ["","Fenwick Re","London","30%","","Firm","Only with the $50M xs $25M"],
+  ["$50M xs $25M","Chubb","Direct","25%","$1,100,000","Firm",""],
+  ["","Tamsin Insurance","","20%","","Firm",""],
+  ["","Pinecrest Syndicate 2468","London","15%","","Firm",""],
+  ["","ACT Facility","Aon facility","10%","","Firm","Follows lead terms"],
+  ["","Harbourline","","10%","$118,000","Firm",""],
+  ["Primary $25M","AIG","Direct","30%","$720,000","Firm",""],
+  ["","Zurich","Direct","25%","","Firm",""],
+  ["","Chubb","Direct","20%","","Firm",""],
+  ["","Liberty Mutual","Wholesale","15%","","Firm",""],
+  ["","QBE","London","10%","$245,000","Firm",""],
+  ["","Sompo","","","","Declined",""]
+];
+const SAMPLE_TXT = `$25M xs $75M  Top layer
+Westfield Specialty 20% ind [Wholesale]
+Everest 25% @ $1.2M (Bermuda)
+Fenwick Re 30% [London] (only with the $50M xs $25M)
 
 $50M xs $25M
-Chubb 25% @ $1.1M
-Tamsin Insurance 20% @ $1.15M
-Pinecrest Syndicate 2468 15% @ $1.05M
-Allianz 10% @ $1.2M (tied – Everest)
-Harbourline 10% @ $1.1M
+Chubb 25% prem $1.1M [Direct]
+Tamsin Insurance 20%
+Pinecrest Syndicate 2468 15% [London]
+ACT 10% (ACT)
+Harbourline $5M line
 
 Primary $25M
-AIG 30% prem $720k
-Zurich 25% prem $575k
-Chubb 20% prem $470k
-Liberty Mutual 15% prem $360k
-QBE 10% prem $245k
+AIG 30% prem $720k [Direct]
+Zurich 25% [Direct]
+Chubb 20% [Direct]
+Liberty Mutual 15% [Wholesale]
+QBE 10% prem $245k [London]
 Sompo declined`;
 
-const src = $('#src'), titleEl = $('#title');
-let tmr;
-function update(){ store.set('src', src.value); store.set('title', titleEl.value); state.data = parse(src.value); render() }
-src.addEventListener('input', ()=>{ clearTimeout(tmr); tmr=setTimeout(update,150) });
-titleEl.addEventListener('input', ()=>{ store.set('title', titleEl.value); render() });
-$('#sample').onclick = ()=>{ src.value = SAMPLE; if(!titleEl.value) titleEl.value='Sample Property Program'; update() };
-$('#clear').onclick = ()=>{ src.value=''; update(); src.focus() };
-document.querySelectorAll('[data-scale]').forEach(b=>b.onclick=()=>{ state.scale=b.dataset.scale; store.set('scale',state.scale); render() });
-document.querySelectorAll('[data-lbl]').forEach(b=>b.onclick=()=>{ state.lbl=b.dataset.lbl; store.set('lbl',state.lbl); render() });
-let rt; addEventListener('resize', ()=>{ clearTimeout(rt); rt=setTimeout(render,120) });
+/* ================= Wiring ================= */
+function setTab(t){ S.tab = t; store.set("tab", t); rebuild(); }
+$$("[data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+$$("[data-colby]").forEach(b=>b.onclick=()=>{ S.colby=b.dataset.colby; store.set("colby",S.colby); render() });
+$$("[data-scale]").forEach(b=>b.onclick=()=>{ S.scale=b.dataset.scale; store.set("scale",S.scale); render() });
+$$("[data-lbl]").forEach(b=>b.onclick=()=>{ S.lbl=b.dataset.lbl; store.set("lbl",S.lbl); render() });
+$("#sampleTbl").onclick = ()=>{ if(!$("#title").value) $("#title").value="Sample Property Program"; S.wb=null; loadRows(SAMPLE_TBL.map(r=>r.slice()), "Sample schedule.xlsx", "15 rows"); };
+$("#sampleTxt").onclick = ()=>{ $("#src").value = SAMPLE_TXT; if(!$("#title").value) $("#title").value="Sample Property Program"; store.set("src", SAMPLE_TXT); rebuild(); };
+let tmr; $("#src").addEventListener("input", ()=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ store.set("src",$("#src").value); rebuild() },150) });
+$("#title").addEventListener("input", ()=>{ store.set("title",$("#title").value); render() });
+let rt; addEventListener("resize", ()=>{ clearTimeout(rt); rt=setTimeout(render,120) });
 
-src.value = store.get('src',''); titleEl.value = store.get('title','');
-state.data = parse(src.value);
-applyTheme(store.get('theme','auto'));
-document.fonts && document.fonts.ready.then(render);
+$("#src").value = store.get("src","");
+$("#title").value = store.get("title","");
+applyTheme(store.get("theme","auto"));
+rebuild();
 })();
 </script>
 </body>
