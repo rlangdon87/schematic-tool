@@ -131,6 +131,7 @@ textarea.tall{min-height:300px}
 .tivw input{width:150px;padding:3px 8px}
 .toast button{margin-left:10px;background:none;border:1px solid currentColor;color:inherit;border-radius:2px;padding:1px 8px;cursor:pointer;font:600 12px var(--f-sans)}
 .toast.act{pointer-events:auto}
+.dl-l{font:600 12px var(--f-sans);color:var(--muted);margin-left:6px}
 .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .filters .in{width:220px}
 .filters select{width:auto;max-width:200px}
@@ -297,7 +298,10 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
           <div class="tivw noprint"><label for="tiv">TIV</label><input id="tiv" class="in" placeholder="e.g. $5.87B" title="Total insured value – shows the rate per $100 of TIV"></div></div>
         <div class="row noprint">
           <button class="btn ghost sm" id="copyPng">Copy Image</button>
-          <button class="btn ghost sm" id="dlPng">Download PNG</button>
+          <span class="dl-l">Download</span>
+          <button class="btn ghost sm" id="dlPng" title="Image of the schematic">PNG</button>
+          <button class="btn ghost sm" id="dlSchemXlsx" title="The schematic drawn in Excel cells (in the layout shown), plus the schedule">Excel</button>
+          <button class="btn ghost sm" id="dlPdf" title="The schematic on page 1, the schedule after it">PDF</button>
           <button class="btn ghost sm" id="print">Print</button>
         </div>
       </div>
@@ -1105,6 +1109,7 @@ function svg(layers, top){
   let y = padT + H;
   bands.forEach((B,i) => { yBot[i] = y; y -= heights[i]; yTop[i] = y; });
   const {blocks, opens} = layoutBoxes(bands, items, width, plotX, plotW);
+  S.geo = {bands, blocks, opens, heights, plotX, plotW, W};
   const P = [];
   P.push(`<defs><pattern id="gap" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="${toHex(cssv("--raised"))}"/><line x1="0" y1="0" x2="0" y2="7" stroke="${C.muted}" stroke-width="1.4" opacity=".4"/></pattern></defs>`);
   P.push(`<rect width="${W}" height="${total}" fill="${C.surface}"/>`);
@@ -1372,6 +1377,15 @@ function exportSvg(){
     if(prev) root.setAttribute("data-theme", prev); else root.removeAttribute("data-theme");
   }
 }
+function exportCanvas(scale){
+  return new Promise((res,rej)=>{
+    if(!S.data.layers.length) return rej("none");
+    const {W, H, svg: src} = exportSvg(), img = new Image();
+    img.onload = ()=>{ const c=document.createElement("canvas"); c.width=W*scale; c.height=H*scale; const x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,c.width,c.height); x.scale(scale,scale); x.drawImage(img,0,0); res({canvas:c, W, H}); };
+    img.onerror = rej;
+    img.src = "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(src);
+  });
+}
 function pngBlob(){
   return new Promise((res,rej)=>{
     if(!S.data.layers.length) return rej("none");
@@ -1382,6 +1396,170 @@ function pngBlob(){
   });
 }
 $("#copyPng").onclick = async ()=>{ try{ const b=await pngBlob(); await navigator.clipboard.write([new ClipboardItem({"image/png":b})]); toast("Schematic copied as an image") }catch(e){ toast("Copy didn't work – use Download PNG") } };
+/* ================= Excel and PDF exports of the schematic ================= */
+const LIBS = {
+  exceljs: "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
+  jspdf: "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+  autotable: "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"
+};
+const libLoads = {};
+function loadLib(url, ready){
+  if(ready()) return Promise.resolve();
+  return libLoads[url] || (libLoads[url] = new Promise((res, rej) => {
+    const sc = document.createElement("script"); sc.src = url;
+    sc.onload = () => res(); sc.onerror = () => { delete libLoads[url]; rej(new Error("load")); };
+    document.head.appendChild(sc);
+  }));
+}
+const fileBase = () => ($("#title").value.trim() || "schematic").replace(/[^\w\- ]+/g, "");
+function saveBlob(blob, name){ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 4000); }
+function withLight(fn){
+  const root = document.documentElement, prev = root.getAttribute("data-theme");
+  root.setAttribute("data-theme", "light"); exporting = true;
+  try{ return fn(); } finally { exporting = false; if(prev) root.setAttribute("data-theme", prev); else root.removeAttribute("data-theme"); }
+}
+const argb = hex => "FF" + toHex(hex).slice(1).toUpperCase();
+const statusText = st => st==="firm" ? "Firm" : st==="indication" ? "Indication" : "Declined";
+
+// the schedule as rows, primary first, for the Excel and PDF exports
+function scheduleRows(){
+  const out = [];
+  S.data.layers.forEach(L => {
+    out.push({head:true, L, cells:[layerName(L)+(L.label?" · "+L.label:""), "", "", L.placed/100, L.limit*L.placed/100, L.lines.some(l=>l.prem!=null) ? L.prem : null, L.price100, layerStatus(L), L.priceBasis]});
+    L.lines.forEach(x => { const dec = x.status==="declined";
+      out.push({x, L, cells:[x.market, x.ap||NONE, dec?null:x.share/100, dec?null:L.limit*x.share/100, dec?null:x.prem, dec?null:x.price100, statusText(x.status), x.note||""],
+                calc:{2:!dec&&x.shareCalc, 3:!dec&&x.lineCalc&&x.share>0, 4:x.premCalc, 5:!dec&&x.priceCalc}}); });
+  });
+  return out;
+}
+
+// Excel: the schematic drawn in cells (same layout as on screen), the schedule on a second sheet
+async function downloadSchematicXlsx(){
+  if(!S.data.layers.length){ toast("Nothing to export yet"); return; }
+  try{ await loadLib(LIBS.exceljs, () => window.ExcelJS); }
+  catch(e){ toast("Couldn't load the Excel library – check your connection and try again"); return; }
+  const layers = S.data.layers, top = Math.max(...layers.map(L=>L.attach+L.limit));
+  const wb = new ExcelJS.Workbook(); wb.creator = "Schematic Builder";
+  const ws = wb.addWorksheet("Schematic", {views:[{showGridLines:false}], pageSetup:{orientation:"landscape", fitToPage:true, fitToWidth:1, fitToHeight:1}});
+  withLight(() => {
+    svg(layers, top);
+    const {bands, blocks, opens, heights, plotX, plotW} = S.geo;
+    const ink = argb(cssv("--ink")), muted = argb(cssv("--muted")), navy = argb(cssv("--navy")), bad = argb(cssv("--bad")), white = "FFFFFFFF";
+    // columns: one per strip between box edges, so every box is a block of merged cells
+    const xs0 = [plotX, plotX+plotW, ...blocks.flatMap(b=>[b.x, b.x+b.w]), ...opens.flatMap(o=>[o.x, o.x+o.w])].map(v=>Math.round(v*2)/2).sort((a,b)=>a-b);
+    const xs = xs0.filter((v,k)=>k===0 || v-xs0[k-1] >= 1.5);
+    const colOf = x => { let best = 0, d = Infinity; xs.forEach((v,k) => { const dd = Math.abs(v-x); if(dd<d){ d=dd; best=k; } }); return best; };
+    const strips = xs.length-1, sideCol = 2+strips, R0 = 4, n = bands.length;
+    const rowOf = i => R0 + (n-1-i);   // top layer first
+    ws.getColumn(1).width = 16;
+    for(let k=0;k<strips;k++) ws.getColumn(2+k).width = Math.max(0.6, (xs[k+1]-xs[k])/7);
+    ws.getColumn(sideCol).width = 24;
+    bands.forEach((B,i) => ws.getRow(rowOf(i)).height = Math.min(409, Math.max(30, heights[i]*0.75)));
+    // title
+    const prem = layers.reduce((s,L)=>s+L.prem,0), p100 = S.bands.bands.every(B=>B.price100) ? S.bands.bands.reduce((s,B)=>s+B.price100,0) : null;
+    ws.mergeCells(1, 1, 1, sideCol); ws.mergeCells(2, 1, 2, sideCol);
+    Object.assign(ws.getCell(1,1), {value: $("#title").value.trim() || "Program Schematic", font:{name:"Arial", bold:true, size:16, color:{argb:navy}}});
+    Object.assign(ws.getCell(2,1), {value: [`${fmtM(top)} program limit`, prem ? `Premium ${fmt$(prem)}` : "", S.tiv ? `TIV ${fmtM(S.tiv)}` : "", S.tiv && (p100||prem) ? `Rate ${fmtRate((p100||prem)/S.tiv*100)} per $100` : "", new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})].filter(Boolean).join("  ·  "), font:{name:"Arial", size:10, color:{argb:muted}}});
+    const taken = new Set(), free = (r1,c1,r2,c2) => { for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++) if(taken.has(r+":"+c)) return false; return true; };
+    const box = (r1,c1,r2,c2, value, style) => {
+      if(c2 < c1) c2 = c1;
+      if(!free(r1,c1,r2,c2)) return;
+      for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++) taken.add(r+":"+c);
+      if(r2>r1 || c2>c1) ws.mergeCells(r1,c1,r2,c2);
+      const cell = ws.getCell(r1,c1); cell.value = value; Object.assign(cell, style);
+      if(r2>r1 || c2>c1) for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++) ws.getCell(r,c).border = style.border;   // borders on merged cells
+    };
+    const thin = {style:"thin", color:{argb:white}};
+    // layer names and the per-layer figures
+    bands.forEach((B,i) => {
+      Object.assign(ws.getCell(rowOf(i),1), {value: bandName(B), font:{name:"Arial", bold:true, size:10, color:{argb:navy}}, alignment:{vertical:"middle", horizontal:"right", wrapText:true}});
+      const side = B.gap ? "Gap – no layer quoted" : [B.premShare>0 ? fmt$(B.prem) : "–", `${fmtPct(B.placed)} placed`, B.rol ? `ROL ${fmtPct(B.rol)}` : "", S.tiv && B.price100 ? `Rate ${fmtRate(B.price100/S.tiv*100)}` : ""].filter(Boolean).join("\n");
+      Object.assign(ws.getCell(rowOf(i),sideCol), {value: side, font:{name:"Arial", size:9, color:{argb:(B.placed<99.995||B.placed>100.005)?bad:muted}}, alignment:{vertical:"middle", wrapText:true}});
+    });
+    // carrier boxes
+    blocks.filter(b=>!b.ext).forEach(bk => {
+      const {it} = bk, {ln, L} = it, g = colourOf(ln), lineAmt = L.limit*ln.share/100, spans = it.i1-it.i0+1;
+      // as much as the box has room for: everything, name and share, or name up the side of a thin box
+      const hpx = heights.slice(it.i0, it.i1+1).reduce((a2,c)=>a2+c,0), thinBox = bk.w < 46, narrow = bk.w < 100;
+      const text = thinBox ? `${ln.market} · ${fmtPct(ln.share)}`
+        : narrow ? [ln.market, fmtPct(ln.share)].join("\n")
+        : [ln.market, `${fmtPct(ln.share)} · ${fmtM(lineAmt)}`, ln.prem!=null ? `Prem ${fmtM(ln.prem)}` : "", ln.price100!=null ? `100% ${fmtM(ln.price100)}` : "", spans>1 ? layerName(L) : "", ln.status==="indication" ? "Indication" : ""].filter(Boolean).join("\n");
+      box(rowOf(it.i1), 2+colOf(bk.x), rowOf(it.i0), 2+colOf(bk.x+bk.w)-1, thinBox && hpx < 60 ? "" : text, {
+        fill:{type:"pattern", pattern:"solid", fgColor:{argb:argb(mix(g, "#ffffff", ln.status==="indication" ? .16 : .34))}},
+        font:{name:"Arial", size:8, color:{argb:ink}}, alignment:{vertical:"middle", horizontal:"center", wrapText:!thinBox, ...(thinBox ? {textRotation:90} : {})},
+        border:{left:{style:"thick", color:{argb:argb(g)}}, right:thin, top: ln.status==="indication" ? {style:"dashed", color:{argb:argb(g)}} : thin, bottom:thin}});
+    });
+    // a carrier widened in one layer (Readable): same fill, no text
+    blocks.filter(b=>b.ext).forEach(bk => {
+      const g = colourOf(bk.it.ln);
+      box(rowOf(bk.band), 2+colOf(bk.x), rowOf(bk.band), 2+colOf(bk.x+bk.w)-1, "", {fill:{type:"pattern", pattern:"solid", fgColor:{argb:argb(mix(g, "#ffffff", .34))}}, border:{right:thin, top:thin, bottom:thin}});
+    });
+    // open space
+    opens.forEach(o => {
+      if(o.w < 1) return; const B = bands[o.i];
+      box(rowOf(o.i), 2+colOf(o.x), rowOf(o.i), 2+colOf(o.x+o.w)-1, o.main ? (o.w < 70 ? fmtPct(o.open) : `${fmtPct(o.open)} open\n${fmtM(B.limit*o.open/100)} unplaced`) : "", {
+        fill:{type:"pattern", pattern:"lightUp", fgColor:{argb:"FFC9D2D7"}, bgColor:{argb:"FFF7F9FA"}},
+        font:{name:"Arial", size:8, bold:true, color:{argb:bad}}, alignment:{vertical:"middle", horizontal:"center", wrapText:true}, border:{left:thin, right:thin, top:thin, bottom:thin}});
+    });
+    // legend
+    let lr = R0 + n + 1;
+    ws.getCell(lr, 1).value = "Legend"; ws.getCell(lr, 1).font = {name:"Arial", bold:true, size:9, color:{argb:muted}};
+    const entries = S.colby==="mkt"
+      ? [...new Map(layers.flatMap(L=>L.lines).filter(l=>l.status!=="declined").map(l=>[mkey(l.market), l.market])).values()].map(nm=>[mktColour(nm), nm])
+      : apList().map(a=>[apColour(a), a]);
+    entries.forEach(([c, t]) => {
+      lr++;
+      Object.assign(ws.getCell(lr, 1), {value: t, font:{name:"Arial", size:9, color:{argb:ink}}, fill:{type:"pattern", pattern:"solid", fgColor:{argb:argb(mix(c, "#ffffff", .34))}}, border:{left:{style:"thick", color:{argb:argb(c)}}}});
+    });
+    ws.getCell(lr+2, 1).value = S.scale==="read" ? "Readable layout: every carrier the same width (not to share)." : S.scale==="prop" ? "Layer height to scale; box width = share of the layer." : "Layers at equal height; box width = share of the layer.";
+    ws.getCell(lr+2, 1).font = {name:"Arial", italic:true, size:8, color:{argb:muted}};
+  });
+  // schedule sheet
+  const sh = wb.addWorksheet("Schedule", {views:[{state:"frozen", ySplit:1}]});
+  sh.columns = [{header:"Layer / Carrier", width:34}, {header:"Access Point", width:16}, {header:"Share", width:10}, {header:"Line", width:15}, {header:"Premium", width:15}, {header:"100% Premium", width:16}, {header:"Status", width:12}, {header:"Notes", width:40}];
+  sh.getRow(1).font = {name:"Arial", bold:true, color:{argb:"FFFFFFFF"}}; sh.getRow(1).fill = {type:"pattern", pattern:"solid", fgColor:{argb:"FF262835"}};
+  const fmts = {2:"0.00%", 3:'"$"#,##0', 4:'"$"#,##0', 5:'"$"#,##0'};
+  scheduleRows().forEach(r => {
+    const vals = r.head ? [r.cells[0], "", r.cells[3], r.cells[4], r.cells[5], r.cells[6], r.cells[7], r.cells[8]] : r.cells;
+    const row = sh.addRow(vals.map(v => v==null ? "" : v));
+    vals.forEach((v,k) => { if(fmts[k] && typeof v==="number") row.getCell(k+1).numFmt = fmts[k]; });
+    if(r.head){ row.font = {name:"Arial", bold:true}; row.fill = {type:"pattern", pattern:"solid", fgColor:{argb:"FFE5EFF0"}}; }
+    else Object.entries(r.calc).forEach(([k, on]) => { if(on) row.getCell(+k+1).font = {name:"Arial", italic:true, color:{argb:"FF0055A8"}}; });
+  });
+  sh.addRow([]); sh.addRow(["Figures in blue italics were calculated (not in the schedule)."]).font = {name:"Arial", italic:true, size:9, color:{argb:"FF5D6E78"}};
+  const buf = await wb.xlsx.writeBuffer();
+  saveBlob(new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), fileBase()+" schematic.xlsx");
+  toast("Downloaded the schematic as Excel");
+}
+
+// PDF: the schematic image on page 1, the schedule after it
+async function downloadPdf(){
+  if(!S.data.layers.length){ toast("Nothing to export yet"); return; }
+  try{ await loadLib(LIBS.jspdf, () => window.jspdf); await loadLib(LIBS.autotable, () => window.jspdf && window.jspdf.jsPDF.API.autoTable); }
+  catch(e){ toast("Couldn't load the PDF library – check your connection and try again"); return; }
+  const {jsPDF} = window.jspdf, doc = new jsPDF({orientation:"landscape", unit:"pt", format:"letter"});
+  const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(), m = 30;
+  const {canvas, W, H} = await exportCanvas(3);
+  const k = Math.min((pw-2*m)/W, (ph-2*m)/H);
+  doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", (pw-W*k)/2, m, W*k, H*k);   // JPEG keeps the file small
+  doc.addPage();
+  const title = $("#title").value.trim() || "Program Schematic";
+  doc.setFontSize(14); doc.setFont(undefined, "bold"); doc.text(`${title} – Schedule`, m, m+10);
+  const money0 = v => v==null || v==="" ? "–" : fmt$(v), pct = v => v==null || v==="" ? "–" : fmtPct(v*100, 4);
+  const body = scheduleRows().map(r => r.head
+    ? [{content:r.cells[0], styles:{fontStyle:"bold", fillColor:[229,239,240]}}, {content:"", styles:{fillColor:[229,239,240]}},
+       ...[pct(r.cells[3]), money0(r.cells[4]), money0(r.cells[5]), money0(r.cells[6])].map(v=>({content:v, styles:{fontStyle:"bold", halign:"right", fillColor:[229,239,240]}})),
+       {content:r.cells[7], styles:{fontStyle:"bold", fillColor:[229,239,240]}}, {content:r.cells[8], styles:{fillColor:[229,239,240], textColor:[93,110,120]}}]
+    : [r.cells[0], r.cells[1], pct(r.cells[2]), money0(r.cells[3]), money0(r.cells[4]), money0(r.cells[5]), r.cells[6], r.cells[7]].map((v,k2) =>
+        ({content:v, styles: Object.assign(k2>=2 && k2<=5 ? {halign:"right"} : {}, r.calc[k2] ? {fontStyle:"italic", textColor:[0,85,168]} : {})})));
+  doc.autoTable({startY:m+22, margin:{left:m, right:m}, head:[["Layer / Carrier","Access Point","Share","Line","Premium","100% Premium","Status","Notes"]], body,
+    styles:{fontSize:8, cellPadding:3}, headStyles:{fillColor:[38,40,53]}, columnStyles:{2:{halign:"right"},3:{halign:"right"},4:{halign:"right"},5:{halign:"right"}}});
+  const pages = doc.getNumberOfPages();
+  for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(8); doc.setFont(undefined, "normal"); doc.setTextColor(120); doc.text(`${title} · page ${i} of ${pages}`, pw-m, ph-14, {align:"right"}); }
+  doc.save(fileBase()+".pdf");
+}
+$("#dlSchemXlsx").onclick = () => downloadSchematicXlsx().catch(() => toast("Couldn't make the Excel file"));
+$("#dlPdf").onclick = () => downloadPdf().catch(() => toast("Couldn't make the PDF"));
 $("#dlPng").onclick = async ()=>{ try{ const b=await pngBlob(); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=(($("#title").value.trim()||"schematic").replace(/[^\w\- ]+/g,""))+".png"; a.click(); }catch(e){ toast("Nothing to download yet") } };
 $("#print").onclick = ()=>print();
 $("#copyTsv").onclick = async ()=>{
@@ -1535,6 +1713,10 @@ $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.11", date:"2026-11-17", notes:[
+    "Download the schematic as Excel: drawn in cells in the layout on screen (Uniform, To Scale or Readable), with coloured boxes, open space, per-layer figures and the legend, plus a Schedule sheet",
+    "Download as PDF: the schematic on page 1 (landscape Letter), then the schedule grouped by layer, with page numbers",
+    "Download buttons in the schematic header: PNG, Excel and PDF"]},
   {v:"1.10", date:"2026-11-17", notes:[
     "Schedule Detail and the Excel file list layers Primary first (smaller primaries first), then by attachment, lowest to highest",
     "Filter the Schedule Detail by carrier or notes, access point, status or layer; matching boxes stay bright in the schematic and the rest fade (exported images are never faded)",

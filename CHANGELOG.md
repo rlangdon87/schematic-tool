@@ -2,6 +2,11 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.11 – 2026-11-17
+- Download the schematic as Excel: drawn in cells in the layout on screen (Uniform, To Scale or Readable), with coloured boxes, open space, per-layer figures and the legend, plus a Schedule sheet
+- Download as PDF: the schematic on page 1 (landscape Letter), then the schedule grouped by layer, with page numbers
+- Download buttons in the schematic header: PNG, Excel and PDF
+
 ## v1.10 – 2026-11-17
 - Schedule Detail and the Excel file list layers Primary first (smaller primaries first), then by attachment, lowest to highest
 - Filter the Schedule Detail by carrier or notes, access point, status or layer; matching boxes stay bright in the schematic and the rest fade (exported images are never faded)
