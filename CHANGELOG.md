@@ -2,6 +2,12 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.6 – 2026-11-17
+- Quick Add Text takes the layer on the same line: "Chubb 10% of Primary $30M", "AIG 2.5% of $50M xs $50M", "Zurich 15% of $30M"
+- One carrier on several layers in one line: "Beazley 10% of Primary $30M, 5% of $20M xs $30M"
+- Also understands "$30M primary", "$20M x $30M" and "p/o"
+- Names like "Beazley / Lloyds" keep the "Lloyds" (and count as London)
+
 ## v1.5 – 2026-11-17
 - New Readable layout: every carrier the same width so names fit, and every layer fills the full width as a clean rectangle
 - In Readable, a carrier on several layers keeps one column all the way up; open space gets a column of its own

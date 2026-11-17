@@ -228,12 +228,14 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
 
       <div data-pane="text" hidden>
         <label class="f" for="src">Paste lines, one quote per line</label>
-        <textarea id="src" class="tall" spellcheck="false" placeholder="$50M xs $25M&#10;Chubb 25% @ $1.1M [London]&#10;Zurich 20% prem $240k"></textarea>
+        <textarea id="src" class="tall" spellcheck="false" placeholder="Chubb 10% of Primary $30M&#10;AIG 2.5% of $50M xs $50M [London]&#10;Beazley 10% of Primary $30M, 5% of $20M xs $30M"></textarea>
         <div class="row" style="margin:10px 0"><button class="btn ghost sm" id="sampleTxt">Load Sample Text</button></div>
         <details class="help">
           <summary>What can I paste?</summary>
           <ul>
             <li><code>$50M xs $25M</code> on its own line starts a layer; <code>P$25M</code> is the primary</li>
+            <li>Or put the layer on the quote line: <code>Chubb 10% of Primary $30M</code>, <code>AIG 2.5% of $50M xs $50M</code>, <code>Zurich 15% of $30M</code></li>
+            <li>One carrier on several layers: <code>Beazley 10% of Primary $30M, 5% of $20M xs $30M</code></li>
             <li><code>Chubb 25% @ $1.1M</code> is 25% at a 100% price of $1.1M</li>
             <li><code>Zurich 20% prem $240k</code> is their premium for that share</li>
             <li><code>AIG $10M line</code> is a $ capacity line; the share is worked out</li>
@@ -371,12 +373,14 @@ const fmt$ = n => n==null||isNaN(n) ? "–" : "$"+Math.round(n).toLocaleString("
 function fmtPct(n,d=2){ if(n==null||isNaN(n)) return "–"; const p=Math.pow(10,d); return (Math.round(n*p)/p).toString()+"%" }
 const layerName = L => L.attach===0 ? "P"+fmtM(L.limit) : fmtM(L.limit)+" xs "+fmtM(L.attach);
 const NUM = String.raw`\$?\s*[\d,]*\.?\d+\s*(?:bn|mm|mil|m|k|b)?\b`;
-const reXS = new RegExp(String.raw`(${NUM})\s*(?:xs\.?|x\/s|excess\s+of|in\s+excess\s+of)\s*(${NUM})`, "i");
+const reXS = new RegExp(String.raw`(${NUM})\s*(?:xs\.?|x\/s|x|excess\s+of|in\s+excess\s+of)\s*(${NUM})`, "i");
 const rePrimary = new RegExp(String.raw`(?:^|[\s(])(?:p|primary)\s*(${NUM})`, "i");
+const rePrimaryAfter = new RegExp(String.raw`(${NUM})\s*primary\b`, "i");          // "$30M primary"
+const reOfAmount = new RegExp(String.raw`(?:\bof|\bp\/o|\bpart\s+of)\s+(${NUM})`, "i");  // "10% of $30M" = primary $30M
 function findLayer(text){
   let m = String(text).match(reXS);
   if(m){ const lim=money(m[1],true), att=money(m[2],true); if(lim && att!=null) return {limit:lim,attach:att,match:m[0]}; }
-  m = String(text).match(rePrimary);
+  m = String(text).match(rePrimary) || String(text).match(rePrimaryAfter);
   if(m){ const lim=money(m[1],true); if(lim) return {limit:lim,attach:0,match:m[0]}; }
   return null;
 }
@@ -603,35 +607,58 @@ function parseTable(){
   return {raw, unread};
 }
 
+/* Quick Add Text. Each line is a layer heading ("$50M xs $25M") or one or more quotes:
+   "Chubb 25% @ $1.1M [London]", "Chubb 10% of Primary $30M", "AIG 2.5% of $50M xs $50M",
+   "Beazley / Lloyds: 10% of Primary $30M, 5% of $20M xs $30M" (one carrier on several layers). */
+function parseQuote(seg){
+  const q = {notes:[], ap:"", share:null, prem:null, price:null, line:null, L:null};
+  let rest = seg.replace(/[([]([^)\]]*)[)\]]/g, (_, n) => { const a = normAP(n); if(n.trim() && (AP.includes(a) || /lloyd|act|gpf|facility/i.test(n)) && !q.ap) q.ap = a; else if(n.trim()) q.notes.push(n.trim()); return " "; });
+  const pm = rest.match(/(?:@|\bprice\b:?|\b100\s*%\s*(?:prem(?:ium)?|price)?\s*(?:of)?\s*)\s*(\$\s*[\d,]*\.?\d+\s*(?:mm|m|k)?|[\d,]*\.?\d+\s*(?:mm|m|k))/i);
+  if(pm){ q.price = money(pm[1]); rest = rest.replace(pm[0]," "); }
+  const prm = rest.match(/\bprem(?:ium)?\b:?\s*(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)/i) || rest.match(/(\$\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)\s*prem(?:ium)?\b/i);
+  if(prm){ q.prem = money(prm[1]); rest = rest.replace(prm[0]," "); }
+  const lm = rest.match(/(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)\s*(?:line|capacity|cap)\b/i);
+  if(lm){ q.line = money(lm[1]); rest = rest.replace(lm[0]," "); }
+  const sm = rest.match(/([\d.]+)\s*%/);
+  if(sm){ q.share = parseFloat(sm[1]); rest = rest.replace(sm[0]," "); }
+  q.L = findLayer(rest);
+  if(q.L) rest = rest.replace(q.L.match, " ");
+  else if(q.share!=null || q.line!=null){
+    const om = rest.match(reOfAmount);
+    if(om){ const lim = money(om[1], true); if(lim){ q.L = {limit:lim, attach:0, match:om[0]}; rest = rest.replace(om[0]," "); } }
+  }
+  rest = rest.replace(/\bp\/o\b|\bpart\s+of\b/ig," ");
+  // an access point written as a word, unless it's part of the name ("Beazley / Lloyds", "TFP Bermuda / Fidelis")
+  if(!q.ap){
+    const am = rest.match(/(^|[^\/\w]\s*)\b(london|lloyd'?s|bermuda|wholesale|direct|captive|act|gpf|art|terrorism)\b(?!\s*\/)/i);
+    const nearSlash = am && /\/\s*$/.test(rest.slice(0, am.index + am[1].length));
+    if(am && !nearSlash && !/lloyd/i.test(am[2])){ q.ap = normAP(am[2]); rest = rest.slice(0, am.index) + am[1] + rest.slice(am.index + am[0].length); }
+  }
+  q.status = statusOf(rest);
+  rest = rest.replace(/\b(ind|indication|indicative|tbc|subject|declined?|nil|no\s*quote|nq|firm|line|share|written|signed|on|of|at|for|layer\s*\d*)\b/ig," ");
+  q.name = rest.replace(/[:;,|–—\-]+/g," ").replace(/\s+/g," ").trim();
+  return q;
+}
 function parseText(text){
   const raw = [], unread = []; let cur = null, curLabel = "";
   text.replace(/\r/g,"").split("\n").forEach((rawLine, i) => {
-    let line = rawLine.trim();
+    const line = rawLine.trim();
     if(!line || /^[-=_*#\s]+$/.test(line)) return;
-    let notes = [], ap = "";
-    line = line.replace(/[([]([^)\]]*)[)\]]/g, (_, n) => { const a = normAP(n); if(n.trim() && (AP.includes(a) || /lloyd|act|gpf|facility/i.test(n)) && !ap) ap = a; else if(n.trim()) notes.push(n.trim()); return " "; });
-    const L = findLayer(line);
-    let rest = L ? line.replace(L.match," ") : line;
-    rest = rest.replace(/\bp\/o\b|\bpart\s+of\b/ig," ");
-    let share=null, prem=null, price=null, lineAmt=null;
-    const pm = rest.match(/(?:@|\bprice\b:?)\s*(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)/i);
-    if(pm){ price = money(pm[1]); rest = rest.replace(pm[0]," "); }
-    const prm = rest.match(/\bprem(?:ium)?\b:?\s*(\$?\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)/i) || rest.match(/(\$\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)\s*prem(?:ium)?\b/i);
-    if(prm){ prem = money(prm[1]); rest = rest.replace(prm[0]," "); }
-    const lm = rest.match(/(\$\s*[\d,]*\.?\d+\s*(?:mm|m|k)?)\s*(?:line|capacity|cap)\b/i);
-    if(lm){ lineAmt = money(lm[1]); rest = rest.replace(lm[0]," "); }
-    const sm = rest.match(/([\d.]+)\s*%/);
-    if(sm){ share = parseFloat(sm[1]); rest = rest.replace(sm[0]," "); }
-    if(!ap){ const am = rest.match(/\b(london|lloyd'?s|bermuda|wholesale|direct|captive|act|gpf)\b/i); if(am){ ap = normAP(am[1]); rest = rest.replace(am[0]," "); } }
-    const st = statusOf(rest);
-    rest = rest.replace(/\b(ind|indication|indicative|tbc|subject|declined?|nil|no\s*quote|nq|firm|line|share|written|signed|on|of|at|for|layer\s*\d*)\b/ig," ");
-    const name = rest.replace(/[:;,|–—\-]+/g," ").replace(/\s+/g," ").trim();
-    if(L && share==null && prem==null && price==null && lineAmt==null && st==="firm"){ cur = L; curLabel = name; return; }
-    if(share==null && lineAmt==null && st!=="declined"){ unread.push({n:i+1, text:rawLine.trim()}); return; }
-    const T = L || cur;
-    if(!T){ unread.push({n:i+1, text:rawLine.trim(), why:"no layer above it"}); return; }
-    raw.push({row:i+1, market:name||"Unnamed market", ap, limit:T.limit, attach:T.attach, label: L?"":curLabel,
-              share, line:lineAmt, prem, price, status:st, note:notes.join("; ")});
+    // several quotes on one line: split at commas (not inside $1,200,000), semicolons, "and", "+"
+    const segs = line.split(/,(?!\d{3}(?!\d))|;|\s+and\s+|\s\+\s/).map(x=>x.trim()).filter(Boolean);
+    const quoteLike = x => /\d\s*%|\bline\b|\bdeclin/i.test(x);
+    const parts = segs.length>1 && segs.filter(quoteLike).length>1 ? segs : [line];
+    let name = "", ap = "";
+    parts.forEach(seg => {
+      const q = parseQuote(seg);
+      if(q.name) name = name || q.name; if(q.ap) ap = ap || q.ap;
+      if(parts.length===1 && q.L && q.share==null && q.prem==null && q.price==null && q.line==null && q.status==="firm"){ cur = q.L; curLabel = q.name; return; }
+      if(q.share==null && q.line==null && q.status!=="declined"){ if(parts.length===1) unread.push({n:i+1, text:line}); return; }
+      const T = q.L || cur;
+      if(!T){ unread.push({n:i+1, text: parts.length>1 ? seg : line, why:"no layer above it"}); return; }
+      raw.push({row:i+1, market:q.name || name || "Unnamed market", ap:q.ap || ap, limit:T.limit, attach:T.attach, label: q.L?"":curLabel,
+                share:q.share, line:q.line, prem:q.prem, price:q.price, status:q.status, note:q.notes.join("; ")});
+    });
   });
   return {raw, unread};
 }
@@ -1206,6 +1233,11 @@ $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.6", date:"2026-11-17", notes:[
+    "Quick Add Text takes the layer on the same line: \"Chubb 10% of Primary $30M\", \"AIG 2.5% of $50M xs $50M\", \"Zurich 15% of $30M\"",
+    "One carrier on several layers in one line: \"Beazley 10% of Primary $30M, 5% of $20M xs $30M\"",
+    "Also understands \"$30M primary\", \"$20M x $30M\" and \"p/o\"",
+    "Names like \"Beazley / Lloyds\" keep the \"Lloyds\" (and count as London)"]},
   {v:"1.5", date:"2026-11-17", notes:[
     "New Readable layout: every carrier the same width so names fit, and every layer fills the full width as a clean rectangle",
     "In Readable, a carrier on several layers keeps one column all the way up; open space gets a column of its own",
