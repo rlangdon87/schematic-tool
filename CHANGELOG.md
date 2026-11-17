@@ -2,6 +2,15 @@
 
 The live version shows next to "Schematic Builder" in the top bar; click it for this list.
 
+## v1.4 – 2026-11-17
+- Overlapping layers (e.g. carriers on P$25M, P$50M and P$75M) are split into stacked layers; a carrier on a bigger layer is one block running through every layer it covers
+- Open space, placed % and premium are worked out for each of those layers
+- Columns are checked by what they hold: a $ "Participation" column is read as the line, and a % column as the share
+- Notes and blank rows under the schedule are ignored
+- Colour by access point is the default again; markets with no access point are all grey
+- Carriers named "… / Lloyds" count as London and "… Bermuda …" as Bermuda when no access point is given
+- Narrow blocks show the carrier name sideways
+
 ## v1.3 – 2026-11-17
 - Version number in the top bar; click it to see the version history
 

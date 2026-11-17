@@ -254,7 +254,7 @@ dialog.log::backdrop{background:rgba(0,0,0,.4)}
       <div class="kpis" id="kpis"></div>
       <div class="issues" id="issues"></div>
       <div class="sch-ctl noprint">
-        <div class="seg-ctl"><span class="l">Colour by</span><button data-colby="ap">Access Point</button><button data-colby="mkt">Market</button></div>
+        <div class="seg-ctl"><span class="l">Colour by</span><button data-colby="ap">Access Point</button><button data-colby="mkt">Each Market</button></div>
         <div class="seg-ctl"><span class="l">Height</span><button data-scale="uniform">Uniform</button><button data-scale="prop">To Scale</button></div>
         <div class="seg-ctl"><span class="l">Show</span><button data-lbl="share">Share</button><button data-lbl="prem">Premium</button><button data-lbl="line">Line $</button></div>
       </div>
@@ -301,6 +301,8 @@ const NONE_L = "#8c9aa3", NONE_D = "#6c7a84";
 const MKT_L = ["#0055a8","#a70171","#0184bc","#e85d10","#6f027f","#13a88a","#007586","#c8174f","#29b0c3","#7aa61a","#b38b00","#01577d"];
 const MKT_D = ["#4a8fdc","#d0459a","#3bb0e0","#f27a33","#a25fc0","#3fcca9","#29b0c3","#f0507f","#78ccd7","#a3cc4a","#d9b23a","#1f86b3"];
 
+// "Convex / Lloyds", "TFP Bermuda / Fidelis": the name itself says where it's placed
+const apFromName = n => /lloyd/i.test(n) ? "London" : /bermuda/i.test(n) ? "Bermuda" : "";
 function normAP(s){
   const x = String(s||"").trim(); if(!x) return "";
   const l = x.toLowerCase();
@@ -405,8 +407,8 @@ const GUESS = [
   ["limit",  /limit|layer size|layer \(\$\)|layer \$|layer amount/],
   ["layer",  /^layer|layer$|structure|layer desc|layer name|program layer/],
   ["market", /market|carrier|insurer|reinsurer|underwriter|company|security|syndicate|paper/],
-  ["share",  /share|%|percent|particip|written|signed|of capacity|order/],
-  ["line",   /line|capacity|amount|\$ ?cap/],
+  ["share",  /share|%|percent|pct|written|signed|of capacity|order/],
+  ["line",   /line|capacity|amount|particip|\$ ?cap/],
   ["prem",   /prem|cost|price/]
 ];
 function guessMap(headers){
@@ -415,6 +417,26 @@ function guessMap(headers){
   for(const [k, re] of GUESS){
     const i = H.findIndex((h, j) => h && !used.has(j) && re.test(h));
     if(i>=0){ map[k]=i; used.add(i); }
+  }
+  return map;
+}
+// headers can mislead ("Participation" may be $ or %): check what the columns actually hold
+const looksMoney = v => { if(v==null||v==="") return null; if(typeof v==="number") return v>100; return /\$/.test(String(v)) || (money(v)||0) > 100; };
+const looksPct = v => { if(v==null||v==="") return null; if(typeof v==="number") return v<=100; return /%/.test(String(v)) || (!/\$/.test(String(v)) && pctNum(v)!=null && pctNum(v)<=100); };
+function colIs(rows, j, test){ const vals = rows.map(r=>test(r[j])).filter(v=>v!=null); return vals.length>0 && vals.filter(Boolean).length >= vals.length*0.8; }
+function refineMap(map, rows, headers){
+  const H = rows.length ? rows[0].length : 0, used = () => new Set(Object.values(map));
+  if(map.share!=null && colIs(rows, map.share, looksMoney)){ if(map.line==null) map.line = map.share; delete map.share; }
+  if(map.line!=null && map.share==null && colIs(rows, map.line, looksPct) && !colIs(rows, map.line, looksMoney)){ map.share = map.line; delete map.line; }
+  if(map.share==null){
+    // an unclaimed column of percentages is the share
+    const u = used(), maxCols = Math.max(H, ...rows.map(r=>r.length));
+    for(let j=0;j<maxCols;j++) if(!u.has(j) && rows.some(r=>/%/.test(String(r[j]??""))) && colIs(rows, j, looksPct)){ map.share = j; break; }
+  }
+  if(map.line==null && headers){
+    // the line slot may have been taken by a column that turned out to be the share
+    const u = used(), j = headers.findIndex((h,k) => !u.has(k) && /line|capacity|amount|particip/i.test(String(h||"")) && !colIs(rows, k, looksPct));
+    if(j>=0) map.line = j;
   }
   return map;
 }
@@ -434,7 +456,7 @@ function detectHeaderRow(rows){
 /* ================= State ================= */
 const S = {
   tab: store.get("tab","table"),
-  colby: store.get("colby","ap"), scale: store.get("scale","uniform"), lbl: store.get("lbl","share"),
+  colby: store.get("colby2","ap"), scale: store.get("scale","uniform"), lbl: store.get("lbl","share"),
   apCol: store.get("apCol",{}),          // user colour overrides per access point
   apSet: store.get("apSet",{}),          // user access point per market key
   wb: null, srcName: "", sheet: 0, hdr: 0, map: {}, rows: [],
@@ -461,7 +483,7 @@ function loadRows(rows, name, info){
   S.hdr = detectHeaderRow(S.rows);
   const hsig = sig(S.rows[S.hdr]||[]);
   const saved = store.get("map:"+hsig, null);
-  S.map = hsig===EXPORT_SIG ? {...EXPORT_MAP} : (saved || guessMap(S.rows[S.hdr]||[]));
+  S.map = hsig===EXPORT_SIG ? {...EXPORT_MAP} : refineMap(saved ? {...saved} : guessMap(S.rows[S.hdr]||[]), S.rows.slice(S.hdr+1), S.rows[S.hdr]);
   $("#srcName").textContent = name; $("#srcInfo").textContent = info||"";
   $("#hdr").value = S.hdr+1;
   $("#sheetWrap").hidden = !S.wb || S.wb.SheetNames.length < 2;
@@ -510,7 +532,7 @@ $("#paste").addEventListener("paste", () => setTimeout(() => { const t=$("#paste
 $("#paste").addEventListener("change", () => { const t=$("#paste").value; if(t.trim() && $("#mapArea").hidden){ S.wb=null; loadRows(rowsFromText(t), "Pasted table"); } });
 $("#newSrc").onclick = () => { $("#loadArea").hidden=false; $("#mapArea").hidden=true; $("#paste").value=""; S.rows=[]; S.wb=null; rebuild(); };
 $("#sheet").onchange = e => { S.sheet = +e.target.value; const r = sheetRows(S.sheet); loadRows(r, S.srcName, `${r.length} rows`); };
-$("#hdr").onchange = e => { S.hdr = Math.max(0, Math.min(S.rows.length-1, (+e.target.value||1)-1)); S.map = guessMap(S.rows[S.hdr]||[]); renderMap(); rebuild(); };
+$("#hdr").onchange = e => { S.hdr = Math.max(0, Math.min(S.rows.length-1, (+e.target.value||1)-1)); S.map = refineMap(guessMap(S.rows[S.hdr]||[]), S.rows.slice(S.hdr+1), S.rows[S.hdr]); renderMap(); rebuild(); };
 
 function renderMap(){
   const H = S.rows[S.hdr] || [];
@@ -555,8 +577,10 @@ function parseTable(){
     if(!name){ return; }
     if(/^(total|sub ?total|layer total)/i.test(name)) return;
     if(!curLayer){ unread.push({n:rowNo, text:name, why:"no layer found for this row"}); return; }
-    let share = pctNum(get(r,"share")); if(share!=null && fraction) share *= 100;
+    const rawShare = get(r,"share");
+    let share = /\$/.test(String(rawShare??"")) ? null : pctNum(rawShare); if(share!=null && fraction) share *= 100;
     let line = money(get(r,"line"));
+    if(line==null && (share==null || share>100) && looksMoney(rawShare)){ line = money(rawShare); share = null; }
     let prem = money(get(r,"prem"));
     let price = money(get(r,"price"));
     // our own Excel export marks figures it calculated; drop them so they're worked out again
@@ -568,6 +592,7 @@ function parseTable(){
       if(/(^|,\s*)premium/.test(calc)) prem = null;
     }
     const st = statusOf(get(r,"status")+" "+(m.status==null?get(r,"note"):""));
+    if(share==null && line==null && prem==null && st!=="declined") return;   // notes, headings, blank lines
     raw.push({row:rowNo, market:name, ap:normAP(get(r,"ap")), limit:curLayer.limit, attach:curLayer.attach,
               share, line, prem, price, status:st, note:String(get(r,"note")??"").trim()});
   });
@@ -622,7 +647,7 @@ function build({raw, unread, problem}){
     let share = x.share, shareCalc = false;
     if((share==null || isNaN(share)) && x.line){ share = x.line / x.limit * 100; shareCalc = true; }
     const mk = mkey(x.market);
-    const ap = S.apSet[mk] || x.ap || "";
+    const ap = S.apSet[mk] || x.ap || apFromName(x.market);
     L.lines.push({...x, share: share||0, ap, prem: x.prem, premCalc:false, shareCalc, lineCalc: !x.line});
   });
   const out = [...layers.values()].sort((a,b)=>a.attach-b.attach);
@@ -697,7 +722,7 @@ const FONT = '"Helvetica Now Text","Helvetica Neue",Helvetica,Arial,sans-serif';
 function tw(s, size, weight){ mctx.font = `${weight||400} ${size}px ${FONT}`; return mctx.measureText(s).width }
 function fitName(name, w, size){
   const words = name.split(" "), c = [name];
-  for(let k=words.length-1;k>=1;k--) c.push(words.slice(0,k).join(" "));
+  for(let k=words.length-1;k>=1;k--){ const t = words.slice(0,k).join(" ").replace(/[\s\/&,(-]+$/,""); if(t) c.push(t); }
   if(words.length>1) c.push(words.map(x=>x[0]).join("").toUpperCase());
   for(const x of c) if(tw(x,size,700) <= w) return x;
   return null;
@@ -727,9 +752,10 @@ function renderMain(){
   const top = Math.max(...layers.map(L=>L.attach+L.limit));
   const prem = layers.reduce((s,L)=>s+L.prem,0);
   const mk = new Set(layers.flatMap(L=>L.lines.filter(x=>x.status!=="declined").map(x=>mkey(x.market))));
-  const open = layers.filter(L=>L.placed < 99.995);
-  const price100 = layers.every(L=>L.price100) ? layers.reduce((s,L)=>s+L.price100,0) : null;
-  $("#progSub").textContent = `${layers.length} layer${layers.length>1?"s":""} · ${mk.size} markets · ${fmtM(top)} program limit`;
+  S.bands = makeBands(layers);
+  const open = S.bands.bands.filter(B=>B.gap || B.placed < 99.995);
+  const price100 = S.bands.bands.every(B=>B.price100) ? S.bands.bands.reduce((s,B)=>s+B.price100,0) : null;
+  $("#progSub").textContent = `${S.bands.bands.length} layer${S.bands.bands.length>1?"s":""} · ${mk.size} markets · ${fmtM(top)} program limit`;
   $("#kpis").innerHTML = [
     ["Program Limit", fmtM(top)],
     ["Premium (placed)", fmt$(prem)],
@@ -754,85 +780,136 @@ function unreadHtml(unread){
     + (unread.length>8 ? `<div class="issue muted">…and ${unread.length-8} more rows skipped</div>` : "");
 }
 function issuesHtml(layers, unread, calc){
-  const out = [];
+  const out = [], {bands, overlap} = S.bands;
+  bands.forEach(B=>{
+    if(B.gap){ out.push(`<div class="issue"><span class="chip bad">Gap in tower</span>between ${fmtM(B.attach)} and ${fmtM(B.attach+B.limit)}</div>`); return; }
+    const gap = 100 - B.placed;
+    if(gap > 0.005) out.push(`<div class="issue"><span class="chip bad">${fmtPct(gap)} open</span>${bandName(B)} – ${fmtM(B.limit*gap/100)} of limit unplaced</div>`);
+    if(gap < -0.005) out.push(`<div class="issue"><span class="chip bad">Overplaced ${fmtPct(B.placed)}</span>${bandName(B)}</div>`);
+  });
   layers.forEach(L=>{
-    const gap = 100 - L.placed;
-    if(gap > 0.005) out.push(`<div class="issue"><span class="chip bad">${fmtPct(gap)} open</span>${layerName(L)} – ${fmtM(L.limit*gap/100)} of limit unplaced</div>`);
-    if(gap < -0.005) out.push(`<div class="issue"><span class="chip bad">Overplaced ${fmtPct(L.placed)}</span>${layerName(L)}</div>`);
     if(L.ind > 0) out.push(`<div class="issue"><span class="chip warn">${fmtPct(L.ind)} indication</span>${layerName(L)} – not firm</div>`);
     if(L.missingPrem) out.push(`<div class="issue"><span class="chip warn">No premium</span>${layerName(L)} – ${L.missingPrem} line${L.missingPrem>1?"s have":" has"} no premium and nothing to calculate it from</div>`);
   });
-  for(let i=1;i<layers.length;i++){
-    const a=layers[i-1], b=layers[i], end=a.attach+a.limit;
-    if(b.attach > end) out.push(`<div class="issue"><span class="chip bad">Gap in tower</span>between ${fmtM(end)} and ${fmtM(b.attach)}</div>`);
-    if(b.attach < end) out.push(`<div class="issue"><span class="chip warn">Overlap</span>${layerName(a)} and ${layerName(b)}</div>`);
-  }
+  if(overlap) out.push(`<div class="issue"><span class="chip info">Layers overlap</span>Quotes on ${layers.map(layerName).join(", ")} are shown as ${bands.length} stacked layers; a line on a bigger layer runs through each one it covers</div>`);
   if(calc) out.push(`<div class="issue"><span class="chip info">${calc} calculated</span>Premium worked out from share × the layer's 100% premium</div>`);
   if(!out.some(x=>x.includes("chip bad")) && layers.length) out.unshift(`<div class="issue"><span class="chip ok">Fully placed</span>Every layer is at 100%</div>`);
   return out.join("") + unreadHtml(unread);
 }
 
+function makeBands(layers){
+  const pts = [...new Set(layers.flatMap(L=>[L.attach, L.attach+L.limit]))].sort((a,b)=>a-b);
+  const bands = [];
+  for(let i=0;i<pts.length-1;i++){
+    const a = pts[i], b = pts[i+1];
+    const exact = layers.find(L=>L.attach===a && L.attach+L.limit===b);
+    bands.push({attach:a, limit:b-a, label: exact ? exact.label : "", occ:[], items:[], placed:0, ind:0, prem:0, premShare:0,
+                gap: !layers.some(L=>L.attach<=a && L.attach+L.limit>=b)});
+  }
+  const items = [];
+  layers.forEach(L => L.lines.forEach(ln => {
+    if(ln.status==="declined" || !(ln.share>0)) return;
+    const i0 = bands.findIndex(B=>B.attach===L.attach), i1 = bands.findIndex(B=>B.attach+B.limit===L.attach+L.limit);
+    items.push({ln, L, i0, i1});
+  }));
+  items.sort((p,q) => (q.i1-q.i0)-(p.i1-p.i0) || p.i0-q.i0);
+  items.forEach(it => {
+    const occ = bands.slice(it.i0, it.i1+1).flatMap(B=>B.occ), w = it.ln.share;
+    const cands = [0, ...occ.map(o=>o[1])].sort((a,b)=>a-b);
+    it.x = cands.find(c => occ.every(o => c+w <= o[0]+1e-7 || c >= o[1]-1e-7));
+    for(let k=it.i0;k<=it.i1;k++){
+      const B = bands[k], part = B.limit/it.L.limit;
+      B.occ.push([it.x, it.x+w]); B.items.push(it);
+      B.placed += w; if(it.ln.status==="indication") B.ind += w;
+      if(it.ln.prem!=null){ B.prem += it.ln.prem*part; B.premShare += w; }
+    }
+  });
+  bands.forEach(B => {
+    B.price100 = B.premShare>0 ? B.prem/(B.premShare/100) : null;
+    B.rol = B.price100 ? B.price100/B.limit*100 : null;
+  });
+  const width = Math.max(100, ...items.map(it=>it.x+it.ln.share));
+  return {bands, items, width, overlap: bands.length !== layers.length};
+}
+const bandName = B => B.attach===0 ? "P"+fmtM(B.limit) : fmtM(B.limit)+" xs "+fmtM(B.attach);
+
 function svg(layers, top){
-  const dark = isDark();
   const C = { ink:toHex(cssv("--ink")), muted:toHex(cssv("--muted")), line:toHex(cssv("--line")), surface:toHex(cssv("--surface")),
               bad:toHex(cssv("--bad")), badbg:toHex(cssv("--bad-bg")), navy:toHex(cssv("--navy")), sub:toHex(cssv("--sb-sub")) };
+  const {bands, items, width} = S.bands;
   const W = Math.max(600, Math.min($("#schem").clientWidth, 1600));
   const axisW = 110, sideW = 150, plotX = axisW, plotW = W - axisW - sideW - 12;
   const uniH = 92, minH = 58;
-  const heights = layers.map(L => S.scale==="uniform" ? uniH : Math.max(minH, (L.limit/top) * Math.max(380, layers.length*105)));
+  const heights = bands.map(B => S.scale==="uniform" ? uniH : Math.max(minH, (B.limit/top) * Math.max(380, bands.length*105)));
   const H = heights.reduce((a,b)=>a+b,0), padT = 6, padB = 30, total = H + padT + padB;
+  const yTop = [], yBot = [];
+  let y = padT + H;
+  bands.forEach((B,i) => { yBot[i] = y; y -= heights[i]; yTop[i] = y; });
+  const X = v => plotX + plotW*v/width;
   const P = [];
   P.push(`<defs><pattern id="gap" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="7" height="7" fill="${C.badbg}"/><line x1="0" y1="0" x2="0" y2="7" stroke="${C.bad}" stroke-width="1.6" opacity=".35"/></pattern></defs>`);
   P.push(`<rect width="${W}" height="${total}" fill="${C.surface}"/>`);
-  let y = padT + H;
-  layers.forEach((L, li) => {
-    const h = heights[li], y0 = y - h;
-    // left: layer name, attachment
-    const yl = [[layerName(L), 12, 700, C.navy]];
-    if(L.label && h>=64) yl.unshift([L.label, 11, 400, C.muted]);
+  const label = (cx, cy, rows) => { let yy = cy - (rows.length-1)*7 + 4; rows.forEach(([t,s,wt,c]) => { P.push(`<text x="${cx}" y="${yy}" text-anchor="middle" font-size="${s}" font-weight="${wt}" fill="${c}">${esc(t)}</text>`); yy+=14; }); };
+
+  bands.forEach((B, i) => {
+    const y0 = yTop[i], h = heights[i];
+    // left: band name
+    const yl = [[bandName(B), 12, 700, C.navy]];
+    if(B.label && h>=64) yl.unshift([B.label, 11, 400, C.muted]);
     let ty = y0 + h/2 - (yl.length-1)*7 + 4;
     yl.forEach(([t,s,w,c]) => { let txt=t; while(tw(txt,s,w)>axisW-14 && txt.includes(" ")) txt=txt.split(" ").slice(0,-1).join(" "); P.push(`<text x="${axisW-10}" y="${ty}" text-anchor="end" font-size="${s}" font-weight="${w}" fill="${c}">${esc(txt)}</text>`); ty+=14; });
-    P.push(`<line x1="${plotX}" x2="${plotX+plotW}" y1="${y}" y2="${y}" stroke="${C.line}"/>`);
-    let x = plotX;
-    const live = L.lines.filter(l=>l.status!=="declined");
-    const scaleW = Math.max(100, L.placed);
-    live.forEach(ln => {
-      const w = plotW * ln.share/scaleW;
-      const g = colourOf(ln);
-      const fill = mix(g, C.surface, ln.status==="indication" ? .16 : .34);
-      const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}\nLine ${fmtM(L.limit*ln.share/100)} · Premium ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
-      const bx = x+1, by = y0+1, bw = Math.max(0, w-2), bh = h-2;
-      P.push(`<g data-tip="${esc(tip)}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="${fill}"/>`);
-      if(ln.status==="indication") P.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="none" stroke="${g}" stroke-dasharray="3 2"/>`);
-      if(bw>3) P.push(`<rect x="${bx}" y="${by}" width="3" height="${bh}" fill="${g}"/>`);
-      const inner = bw - 10, cx = bx + 1.5 + bw/2;
-      const val = S.lbl==="prem" ? (ln.prem!=null ? fmtM(ln.prem) : "–") : S.lbl==="line" ? fmtM(L.limit*ln.share/100) : fmtPct(ln.share);
-      const nameFit = inner>12 ? fitName(ln.market, inner, 11) : null;
-      const lines = [];
-      if(nameFit && h>=34) lines.push([nameFit, 11, 700, C.ink]);
-      if(tw(val,11,400) <= inner) lines.push([val, 11, 400, C.sub]);
-      if(ln.status==="indication" && h>=58 && tw("Indication",10,400)<=inner) lines.push(["Indication",10,400,C.muted]);
-      let yy = y0 + h/2 - (lines.length-1)*7 + 4;
-      lines.forEach(([t,s,wt,c]) => { P.push(`<text x="${cx}" y="${yy}" text-anchor="middle" font-size="${s}" font-weight="${wt}" fill="${c}">${esc(t)}</text>`); yy+=14; });
+    P.push(`<line x1="${plotX}" x2="${plotX+plotW}" y1="${yBot[i]}" y2="${yBot[i]}" stroke="${C.line}"/>`);
+    // open space: whatever of 0–100% no line covers
+    const occ = [...B.occ].sort((a,b)=>a[0]-b[0]), free = []; let at = 0;
+    occ.forEach(([a,b]) => { if(a > at+1e-7) free.push([at, Math.min(a,100)]); at = Math.max(at, b); });
+    if(at < 100-1e-7) free.push([at, 100]);
+    const open = Math.max(0, 100 - B.placed), big = free.filter(f=>f[1]>f[0]).sort((a,b)=>(b[1]-b[0])-(a[1]-a[0]))[0];
+    free.forEach(([a,b]) => {
+      if(b-a < 1e-7) return;
+      const x0 = X(a), w = X(b)-x0;
+      P.push(`<g data-tip="${esc(fmtPct(open)+" open on "+bandName(B)+"\n"+fmtM(B.limit*open/100)+" of limit unplaced")}"><rect x="${x0+1}" y="${y0+1}" width="${Math.max(0,w-2)}" height="${h-2}" rx="3" fill="url(#gap)"/>`);
+      if(big && a===big[0] && b===big[1]){
+        const t = fmtPct(open)+" open";
+        if(tw(t,11,700) <= w-10) label(x0+w/2, y0+h/2, [[t,11,700,C.bad]]);
+        else if(tw(fmtPct(open),11,700) <= w-6) label(x0+w/2, y0+h/2, [[fmtPct(open),11,700,C.bad]]);
+      }
       P.push(`</g>`);
-      x += w;
     });
-    if(L.placed < 99.995){
-      const w = plotW*(100-L.placed)/100, t = fmtPct(100-L.placed)+" open";
-      P.push(`<g data-tip="${esc(fmtPct(100-L.placed)+" open on "+layerName(L)+"\n"+fmtM(L.limit*(100-L.placed)/100)+" of limit unplaced")}"><rect x="${x+1}" y="${y0+1}" width="${Math.max(0,w-2)}" height="${h-2}" rx="3" fill="url(#gap)"/>`);
-      if(tw(t,11,700) <= w-10) P.push(`<text x="${x+w/2}" y="${y0+h/2+4}" text-anchor="middle" font-size="11" font-weight="700" fill="${C.bad}">${t}</text>`);
-      else if(tw(fmtPct(100-L.placed),11,700) <= w-6) P.push(`<text x="${x+w/2}" y="${y0+h/2+4}" text-anchor="middle" font-size="11" font-weight="700" fill="${C.bad}">${fmtPct(100-L.placed)}</text>`);
-      P.push(`</g>`);
-    }
-    if(L.placed > 100.005) P.push(`<rect x="${plotX}" y="${y0+1}" width="${plotW}" height="${h-2}" fill="none" stroke="${C.bad}" stroke-width="2" rx="3"/>`);
-    // right: premium summary
+    if(B.placed > 100.005) P.push(`<rect x="${plotX}" y="${y0+1}" width="${plotW}" height="${h-2}" fill="none" stroke="${C.bad}" stroke-width="2" rx="3"/>`);
+    // right: premium for this band (lines across several bands split by limit)
     const sx = plotX + plotW + 14;
-    const sl = [[fmt$(L.prem), 12, 700, C.navy], [fmtPct(L.placed)+" placed", 11, 400, (L.placed<99.995||L.placed>100.005)?C.bad:C.muted]];
-    if(L.rol && h>=56) sl.push([`ROL ${fmtPct(L.rol)}`, 11, 400, C.muted]);
+    const sl = B.gap ? [["Gap", 12, 700, C.bad], ["no layer quoted", 11, 400, C.bad]]
+      : [[fmt$(B.prem), 12, 700, C.navy], [fmtPct(B.placed)+" placed", 11, 400, (B.placed<99.995||B.placed>100.005)?C.bad:C.muted]];
+    if(!B.gap && B.rol && h>=56) sl.push([`ROL ${fmtPct(B.rol)}`, 11, 400, C.muted]);
     let sy = y0 + h/2 - (sl.length-1)*7 + 4;
     sl.forEach(([t,s,w,c]) => { P.push(`<text x="${sx}" y="${sy}" font-size="${s}" font-weight="${w}" fill="${c}">${esc(t)}</text>`); sy+=14; });
-    y = y0;
   });
+
+  // carrier blocks
+  items.forEach(it => {
+    const {ln, L} = it, y0 = yTop[it.i1], h = yBot[it.i0] - y0, spans = it.i1 - it.i0 + 1;
+    const g = colourOf(ln), fill = mix(g, C.surface, ln.status==="indication" ? .16 : .34);
+    const tip = `${ln.market}${ln.ap?" · "+ln.ap:" · access point not assigned"}\n${layerName(L)} · ${fmtPct(ln.share,4)}${ln.status==="indication"?" (indication)":""}${spans>1?` · runs through ${spans} layers`:""}\nLine ${fmt$(L.limit*ln.share/100)} · Premium ${fmt$(ln.prem)}${ln.premCalc?" (calculated)":""}${ln.note?"\n"+ln.note:""}`;
+    const bx = X(it.x)+1, by = y0+1, bw = Math.max(0, X(it.x+ln.share)-X(it.x)-2), bh = h-2;
+    P.push(`<g data-tip="${esc(tip)}"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="${fill}"/>`);
+    if(ln.status==="indication") P.push(`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="3" fill="none" stroke="${g}" stroke-dasharray="3 2"/>`);
+    if(bw>3) P.push(`<rect x="${bx}" y="${by}" width="3" height="${bh}" fill="${g}"/>`);
+    const inner = bw - 10, cx = bx + 1.5 + bw/2;
+    const val = S.lbl==="prem" ? (ln.prem!=null ? fmtM(ln.prem) : "–") : S.lbl==="line" ? fmtM(L.limit*ln.share/100) : fmtPct(ln.share);
+    const nameFit = inner>12 ? fitName(ln.market, inner, 11) : null;
+    const rows = [];
+    if(nameFit && h>=34) rows.push([nameFit, 11, 700, C.ink]);
+    if(tw(val,11,400) <= inner) rows.push([val, 11, 400, C.sub]);
+    if(spans>1 && h>=80 && tw(layerName(L),10,400) <= inner) rows.push([layerName(L),10,400,C.muted]);
+    if(ln.status==="indication" && h>=58 && tw("Indication",10,400)<=inner) rows.push(["Indication",10,400,C.muted]);
+    if(!nameFit && bw >= 13){
+      // too narrow for a name across: write it up the block if it fits that way
+      const up = fitName(ln.market, bh-12, 11);
+      if(up){ const vy = y0+h/2; P.push(`<text transform="translate(${cx+4} ${vy}) rotate(-90)" text-anchor="middle" font-size="11" font-weight="700" fill="${C.ink}">${esc(up)}</text>`); }
+    } else label(cx, y0+h/2, rows);
+    P.push(`</g>`);
+  });
+
   P.push(`<line x1="${plotX}" x2="${plotX}" y1="${padT}" y2="${padT+H}" stroke="${C.line}"/>`);
   P.push(`<text x="${axisW-10}" y="${padT+10}" text-anchor="end" font-size="11" fill="${C.muted}">${fmtM(top)}</text>`);
   const ttl = $("#title").value.trim();
@@ -857,11 +934,16 @@ function renderLegend(){
   const rc = $("#resetCols"); if(rc) rc.onclick = () => { S.apCol = {}; store.set("apCol", {}); render(); };
 }
 
+// a quoted layer is placed when every band it covers is at 100%
+function layerStatus(L){
+  const bs = S.bands.bands.filter(B=>B.attach>=L.attach && B.attach+B.limit<=L.attach+L.limit);
+  return bs.some(B=>B.placed<99.995) ? "Open" : bs.some(B=>B.placed>100.005) ? "Overplaced" : "Placed";
+}
 function tableHtml(layers){
   const aps = [...new Set([...AP, ...apList().filter(a=>a!==NONE)])];
   let h = `<table class="grid"><thead><tr><th>Layer / Market</th><th>Access Point</th><th class="r">Share</th><th class="r">Line</th><th class="r">Premium</th><th class="r">100% Premium</th><th>Status</th><th>Notes</th></tr></thead><tbody>`;
   [...layers].reverse().forEach(L=>{
-    h += `<tr class="lh"><td>${layerName(L)}${L.label?" · "+esc(L.label):""}</td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmt$(L.limit*L.placed/100)}</td><td class="r">${fmt$(L.prem)}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${L.placed<99.995?"Open":L.placed>100.005?"Overplaced":"Placed"}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td></tr>`;
+    h += `<tr class="lh"><td>${layerName(L)}${L.label?" · "+esc(L.label):""}</td><td></td><td class="r">${fmtPct(L.placed)}</td><td class="r">${fmt$(L.limit*L.placed/100)}</td><td class="r">${fmt$(L.prem)}</td><td class="r" title="${esc(L.priceBasis)}">${fmt$(L.price100)}</td><td>${layerStatus(L)}</td><td class="muted" style="font-weight:400">${esc(L.priceBasis)}</td></tr>`;
     L.lines.forEach(x=>{
       const k = mkey(x.market), dec = x.status==="declined";
       const sw = dec ? `<span class="sw" style="border:1px solid var(--line)"></span>` : `<span class="sw" style="background:${colourOf(x)}"></span>`;
@@ -1031,6 +1113,14 @@ $("#xlsxOut").onclick = () => downloadXlsx();
 
 /* ================= Version history (newest first; bump on every change pushed to main) ================= */
 const VERSIONS = [
+  {v:"1.4", date:"2026-11-17", notes:[
+    "Overlapping layers (e.g. carriers on P$25M, P$50M and P$75M) are split into stacked layers; a carrier on a bigger layer is one block running through every layer it covers",
+    "Open space, placed % and premium are worked out for each of those layers",
+    "Columns are checked by what they hold: a $ \"Participation\" column is read as the line, and a % column as the share",
+    "Notes and blank rows under the schedule are ignored",
+    "Colour by access point is the default again; markets with no access point are all grey",
+    "Carriers named \"… / Lloyds\" count as London and \"… Bermuda …\" as Bermuda when no access point is given",
+    "Narrow blocks show the carrier name sideways"]},
   {v:"1.3", date:"2026-11-17", notes:[
     "Version number in the top bar; click it to see this history"]},
   {v:"1.2", date:"2026-11-17", notes:[
@@ -1090,7 +1180,7 @@ Sompo declined`;
 /* ================= Wiring ================= */
 function setTab(t){ S.tab = t; store.set("tab", t); rebuild(); }
 $$("[data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
-$$("[data-colby]").forEach(b=>b.onclick=()=>{ S.colby=b.dataset.colby; store.set("colby",S.colby); render() });
+$$("[data-colby]").forEach(b=>b.onclick=()=>{ S.colby=b.dataset.colby; store.set("colby2",S.colby); render() });
 $$("[data-scale]").forEach(b=>b.onclick=()=>{ S.scale=b.dataset.scale; store.set("scale",S.scale); render() });
 $$("[data-lbl]").forEach(b=>b.onclick=()=>{ S.lbl=b.dataset.lbl; store.set("lbl",S.lbl); render() });
 $("#sampleTbl").onclick = ()=>{ if(!$("#title").value) $("#title").value="Sample Property Program"; S.wb=null; loadRows(SAMPLE_TBL.map(r=>r.slice()), "Sample schedule.xlsx", "15 rows"); };
